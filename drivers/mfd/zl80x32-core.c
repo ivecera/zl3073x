@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <linux/module.h>
+#include <net/devlink.h>
 #include "zl80x32.h"
 
 #define ZL80032_PAGE_SIZE	128
@@ -35,17 +36,38 @@ const struct regmap_config *zl80x32_get_regmap_config(void)
 }
 EXPORT_SYMBOL_GPL(zl80x32_get_regmap_config);
 
+static const struct devlink_ops zl80x32_devlink_ops = {
+};
+
+static void zl80x32_devlink_free(void *ptr)
+{
+	devlink_free(ptr);
+}
+
 struct zl80x32_dev *zl80x32_dev_alloc(struct device *dev)
 {
-	struct zl80x32_dev *zldev;
+	struct devlink *devlink;
 
-	return devm_kzalloc(dev, sizeof(*zldev), GFP_KERNEL);
+	devlink = devlink_alloc(&zl80x32_devlink_ops,
+				sizeof(struct zl80x32_dev), dev);
+	if (!devlink)
+		return NULL;
+
+	if (devm_add_action_or_reset(dev, zl80x32_devlink_free, devlink))
+		return NULL;
+
+	return devlink_priv(devlink);
 }
 EXPORT_SYMBOL_GPL(zl80x32_dev_alloc);
 
 int zl80x32_dev_init(struct zl80x32_dev *zldev)
 {
+	struct devlink *devlink;
+
 	mutex_init(&zldev->lock);
+
+	devlink = priv_to_devlink(zldev);
+	devlink_register(devlink);
 
 	return 0;
 }
