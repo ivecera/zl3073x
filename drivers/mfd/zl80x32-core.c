@@ -139,7 +139,82 @@ static inline int zl80x32_reg_update(struct zl80x32_dev *zldev,
 	return zl80x32_reg_write(zldev, reg_info, tmp);
 }
 
+/**
+ * zl80x32_devlink_info_get - Devlink device info callback
+ * @devlink: devlink structure pointer
+ * @req: devlink request pointer to store information
+ * @extack: netlink extack pointer to report errors
+ *
+ * Returns 0 in case of success or negative value otherwise
+ */
+static int zl80x32_devlink_info_get(struct devlink *devlink,
+				    struct devlink_info_req *req,
+				    struct netlink_ext_ack *extack)
+{
+	struct zl80x32_dev *zldev = devlink_priv(devlink);
+	unsigned int id, revision, fw_ver, cfg_ver;
+	char buf[16];
+	int rc;
+
+	mutex_lock(&zldev->lock);
+
+	rc = zl80x32_reg_read(zldev, ZL80X32_REG(id), &id);
+	if (rc)
+		goto finish;
+
+	snprintf(buf, sizeof(buf), "%X", id);
+	rc = devlink_info_version_fixed_put(req,
+					DEVLINK_INFO_VERSION_GENERIC_ASIC_ID,
+					buf);
+	if (rc)
+		goto finish;
+
+	rc = zl80x32_reg_read(zldev, ZL80X32_REG(revision), &revision);
+	if (rc)
+		goto finish;
+
+	snprintf(buf, sizeof(buf), "%X", revision);
+	rc = devlink_info_version_fixed_put(req,
+					DEVLINK_INFO_VERSION_GENERIC_ASIC_REV,
+					buf);
+	if (rc)
+		goto finish;
+
+	rc = zl80x32_reg_read(zldev, ZL80X32_REG(fw_ver), &fw_ver);
+	if (rc)
+		goto finish;
+
+	snprintf(buf, sizeof(buf), "%u", fw_ver);
+	rc = devlink_info_version_fixed_put(req,
+					    DEVLINK_INFO_VERSION_GENERIC_FW,
+					    buf);
+	if (rc)
+		goto finish;
+
+	rc = zl80x32_reg_read(zldev, ZL80X32_REG(custom_config_ver), &cfg_ver);
+	if (rc)
+		goto finish;
+
+	/* No custom config version */
+	if (!cfg_ver)
+		goto finish;
+
+	snprintf(buf, sizeof(buf), "%lu.%lu.%lu.%lu",
+		 FIELD_GET(GENMASK(31, 24), cfg_ver),
+		 FIELD_GET(GENMASK(23, 16), cfg_ver),
+		 FIELD_GET(GENMASK(15, 8), cfg_ver),
+		 FIELD_GET(GENMASK(7, 0), cfg_ver));
+
+	rc = devlink_info_version_running_put(req, "cfg.custom_ver", buf);
+
+finish:
+	mutex_unlock(&zldev->lock);
+
+	return rc;
+}
+
 static const struct devlink_ops zl80x32_devlink_ops = {
+	.info_get = zl80x32_devlink_info_get,
 };
 
 static void zl80x32_devlink_free(void *ptr)
