@@ -3,6 +3,7 @@
 #include <linux/i2c.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/mfd/zl80x32.h>
 #include "zl80x32.h"
 
 static const struct i2c_device_id zl80x32_i2c_id[] = {
@@ -15,6 +16,36 @@ static const struct of_device_id zl80x32_i2c_of_match[] = {
 	{ .compatible = "microchip,zl80032-i2c" },
 	{ /* sentinel */ },
 };
+
+static int zl80x32_i2c_detect(struct i2c_client *client,
+			      struct i2c_board_info *info)
+{
+	struct i2c_adapter *adapter = client->adapter;
+	s32 val;
+
+	if (!i2c_check_functionality(adapter, I2C_FUNC_SMBUS_BYTE_DATA))
+		return -ENODEV;
+
+	/* Lower 7 bits of 'info' register should contain 0x21 */
+	val = i2c_smbus_read_byte_data(client, ZL80X32_REG_INFO);
+	if ((val & GENMASK(6, 0)) != 0x21)
+		return -ENODEV;
+
+	/* 'id' register should contain 0x1F60 */
+	val = i2c_smbus_read_byte_data(client, ZL80X32_REG_ID);
+	if (val != 0x1f)
+		return -ENODEV;
+	val = i2c_smbus_read_byte(client);
+	if (val != 0x60)
+		return -ENODEV;
+
+	/* 'i2c_device_addr' register should contain i2c client address */
+	val = i2c_smbus_read_byte_data(client, ZL80X32_REG_I2C_DEVICE_ADDR);
+	if (val != client->addr)
+		return -ENODEV;
+
+	return 0;
+}
 
 static int zl80x32_i2c_probe(struct i2c_client *client)
 {
@@ -56,6 +87,7 @@ static struct i2c_driver zl80x32_i2c_driver = {
 		.name = "zl80x32",
 		.of_match_table = of_match_ptr(zl80x32_i2c_of_match),
 	},
+	.detect = zl80x32_i2c_detect,
 	.probe = zl80x32_i2c_probe,
 	.remove = zl80x32_i2c_remove,
 	.id_table = zl80x32_i2c_id,
