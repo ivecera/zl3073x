@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <linux/module.h>
+#include <linux/unaligned.h>
 #include <net/devlink.h>
 #include "zl80x32.h"
 
@@ -35,6 +36,107 @@ const struct regmap_config *zl80x32_get_regmap_config(void)
 	return &zl80x32_regmap_config;
 }
 EXPORT_SYMBOL_GPL(zl80x32_get_regmap_config);
+
+/**
+ * zl80x32_reg_read - Read value from device register
+ * @zldev: device structure pointer
+ * @reg_info: pointer to register definition
+ * @value: place to store value read from device register
+ *
+ * Returns 0 in case of success or negative value otherwise
+ */
+static inline int zl80x32_reg_read(struct zl80x32_dev *zldev,
+				   const struct zl80x32_reg_info *reg_info,
+				   unsigned int *value)
+{
+	u8 buf[4];
+	int rc;
+
+	BUG_ON(!mutex_is_locked(&zldev->lock));
+
+	rc = regmap_bulk_read(zldev->regmap, reg_info->addr, buf,
+			      reg_info->len);
+	if (rc)
+		return rc;
+
+	switch (reg_info->len) {
+	case 1:
+		*value = buf[0];
+		break;
+	case 2:
+		*value = get_unaligned_be16(buf);
+		break;
+	case 4:
+		*value = get_unaligned_be32(buf);
+		break;
+	default:
+		BUG();
+	}
+
+	return rc;
+}
+
+/**
+ * zl80x32_reg_write - Write value to device register
+ * @zldev: device structure pointer
+ * @reg_info: pointer to register definition
+ * @value: value to write to device register
+ *
+ * Returns 0 in case of success or negative value otherwise
+ */
+static inline int zl80x32_reg_write(struct zl80x32_dev *zldev,
+				    const struct zl80x32_reg_info *reg_info,
+				    unsigned int value)
+{
+	u8 buf[4];
+
+	BUG_ON(!mutex_is_locked(&zldev->lock));
+
+	switch (reg_info->len) {
+	case 1:
+		buf[0] = value;
+		break;
+	case 2:
+		put_unaligned_be16(value, buf);
+		break;
+	case 4:
+		put_unaligned_be32(value, buf);
+		break;
+	default:
+		BUG();
+	}
+
+	return regmap_bulk_write(zldev->regmap, reg_info->addr, buf,
+				 reg_info->len);
+}
+
+/**
+ * zl80x32_reg_write - Update value in device register
+ * @zldev: device structure pointer
+ * @reg_info: pointer to register definition
+ * @value: value used to update to device register
+ * @mask: mask speciifying bits to be updated
+ *
+ * Returns 0 in case of success or negative value otherwise
+ */
+static inline int zl80x32_reg_update(struct zl80x32_dev *zldev,
+				     const struct zl80x32_reg_info *reg_info,
+				     unsigned int value, unsigned int mask)
+{
+	unsigned int tmp;
+	int rc;
+
+	BUG_ON(!mutex_is_locked(&zldev->lock));
+
+	rc = zl80x32_reg_read(zldev, reg_info, &tmp);
+	if (rc)
+		return rc;
+
+	tmp &= ~mask;
+	tmp |= value & mask;
+
+	return zl80x32_reg_write(zldev, reg_info, tmp);
+}
 
 static const struct devlink_ops zl80x32_devlink_ops = {
 };
