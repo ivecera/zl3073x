@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <linux/bitfield.h>
 #include <linux/module.h>
 #include <linux/unaligned.h>
 #include <net/devlink.h>
@@ -164,9 +165,27 @@ EXPORT_SYMBOL_GPL(zl80x32_dev_alloc);
 
 int zl80x32_dev_init(struct zl80x32_dev *zldev)
 {
+	unsigned int id, revision, fw_ver, cfg_ver;
 	struct devlink *devlink;
 
 	mutex_init(&zldev->lock);
+
+	mutex_lock(&zldev->lock);
+
+	zl80x32_reg_read(zldev, ZL80X32_REG(id), &id);
+	zl80x32_reg_read(zldev, ZL80X32_REG(revision), &revision);
+	zl80x32_reg_read(zldev, ZL80X32_REG(fw_ver), &fw_ver);
+	zl80x32_reg_read(zldev, ZL80X32_REG(custom_config_ver), &cfg_ver);
+
+	mutex_unlock(&zldev->lock);
+
+	dev_info(zldev->dev, "ChipID(%X), ChipRev(%X), FwVer(%u)\n",
+		 id, revision, fw_ver);
+	dev_info(zldev->dev, "Custom config version: %lu.%lu.%lu.%lu\n",
+		 FIELD_GET(GENMASK(31, 24), cfg_ver),
+		 FIELD_GET(GENMASK(23, 16), cfg_ver),
+		 FIELD_GET(GENMASK(15, 8), cfg_ver),
+		 FIELD_GET(GENMASK(7, 0), cfg_ver));
 
 	devlink = priv_to_devlink(zldev);
 	devlink_register(devlink);
