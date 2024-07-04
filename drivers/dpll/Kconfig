@@ -3,5 +3,14 @@
 # Generic DPLL drivers configuration
 #
 
+menu "DPLL support"
+
 config DPLL
 	bool
+
+config DPLL_ZL80X32
+	tristate "Microchip ZL80X32 DPLL support"
+	depends on MFD_ZL80X32_CORE
+	select DPLL
+
+endmenu

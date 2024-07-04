@@ -265,6 +265,8 @@ int zl80x32_dev_init(struct zl80x32_dev *zldev)
 	devlink = priv_to_devlink(zldev);
 	devlink_register(devlink);
 
+	zl80x32_dpll_init(zldev);
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(zl80x32_dev_init);

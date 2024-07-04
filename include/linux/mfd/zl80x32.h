@@ -49,4 +49,16 @@ ZL80X32_REG_DEFINE(custom_config_ver, CUSTOM_CONFIG_VER, 4);
 #define ZL80X32_REG_I2C_DEVICE_ADDR		0x003e
 ZL80X32_REG_DEFINE(i2c_device_addr, I2C_DEVICE_ADDR, 1);
 
+#if IS_ENABLED(CONFIG_DPLL)
+
+void zl80x32_dpll_init(struct zl80x32_dev * dev);
+
+#else
+
+static inline void zl80x32_dpll_init(struct zl80x32_dev * dev)
+{
+}
+
+#endif
+
 #endif /* __LINUX_MFD_ZL80X32_H */
