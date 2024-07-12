@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "zl80x32.h"
+#include "zl80x32-flash.h"
 
 /**
  * zl80x32_flash_update - Devlink flash update callback
