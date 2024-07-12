@@ -14,7 +14,8 @@ struct zl80x32_heximage;
  * @max_words: Maximal image size in 32-bit words
  * @flash_op: Operation specific to flash image type
  * @load_addr: Device memory address where should be the image loaded
- * @dest_page: Destination page where should be the image flashed
+ * @flash_page: Destination page where should be the image flashed
+ * @backup_page: Destination page where should be @flash_page copied
  */
 struct zl80x32_heximage_info {
 	const char		*name;
@@ -22,7 +23,8 @@ struct zl80x32_heximage_info {
 	int			(*flash_op)(struct zl80x32_dev *zldev,
 					    struct zl80x32_heximage *image);
 	u32			load_addr;
-	u32			page;
+	u32			flash_page;
+	u32			backup_page;
 };
 
 /**
