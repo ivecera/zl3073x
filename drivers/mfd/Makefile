@@ -291,6 +291,6 @@ obj-$(CONFIG_MFD_ATC260X_I2C)	+= atc260x-i2c.o
 obj-$(CONFIG_MFD_RSMU_I2C)	+= rsmu_i2c.o rsmu_core.o
 obj-$(CONFIG_MFD_RSMU_SPI)	+= rsmu_spi.o rsmu_core.o
 
-obj-$(CONFIG_MFD_ZL80X32_CORE)	+= zl80x32-core.o
+obj-$(CONFIG_MFD_ZL80X32_CORE)	+= zl80x32-core.o zl80x32-flash.o
 obj-$(CONFIG_MFD_ZL80X32_I2C)	+= zl80x32-i2c.o
 obj-$(CONFIG_MFD_ZL80X32_SPI)	+= zl80x32-spi.o
