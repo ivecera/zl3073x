@@ -4,6 +4,103 @@
 #include "zl80x32-flash.h"
 
 /**
+ * enum zl80x32_heximage_id - Identifiers for possible flash image types
+ */
+enum zl80x32_heximage_id {
+	ZL80X32_HEXIMAGE_INVALID = -1,
+	ZL80X32_HEXIMAGE_UTIL = 0,
+	ZL80X32_HEXIMAGE_FW1,
+	ZL80X32_HEXIMAGE_FW2,
+	ZL80X32_HEXIMAGE_FW3,
+	ZL80X32_HEXIMAGE_CFG0,
+	ZL80X32_HEXIMAGE_CFG1,
+	ZL80X32_HEXIMAGE_CFG2,
+	ZL80X32_HEXIMAGE_CFG3,
+	ZL80X32_HEXIMAGE_CFG4,
+	ZL80X32_HEXIMAGE_CFG5,
+	ZL80X32_HEXIMAGE_CFG6,
+	ZL80X32_NUM_HEXIMAGES,
+};
+
+/*
+ * Array that specifies all possible flash image types
+ */
+static const struct zl80x32_heximage_info zl80x32_heximage_info[] = {
+	/*                 ID		name		cmd
+	 *                 max_words	load_addr	page	page_copy */
+	[ZL80X32_HEXIMAGE_UTIL] = {
+		.name		= "utility",
+		.max_words	= 0x08c0,
+		.load_addr	= 0x20000000,
+	},
+	[ZL80X32_HEXIMAGE_FW1] = {
+		.name		= "firmware1",
+		.max_words	= 0xd400,
+		.load_addr	= 0x20002000,
+		.flash_page	= 0x020,
+	},
+	[ZL80X32_HEXIMAGE_FW2] = {
+		.name		= "firmware2",
+		.max_words	= 0x0010,
+		.load_addr	= 0x20000000,
+		.flash_page	= 0x3e0,
+		.backup_page	= 0x000,
+	},
+	[ZL80X32_HEXIMAGE_FW3] = {
+		.name		= "firmware3",
+		.max_words	= 0x0092,
+		.load_addr	= 0x20000400,
+		.flash_page	= 0x3e4,
+		.backup_page	= 0x004,
+	},
+	[ZL80X32_HEXIMAGE_CFG0] = {
+		.name		= "config0",
+		.max_words	= 0x0400,
+		.load_addr	= 0x20000000,
+		.flash_page	= 0x3d0,
+	},
+	[ZL80X32_HEXIMAGE_CFG1] = {
+		.name		= "config1",
+		.max_words	= 0x0400,
+		.load_addr	= 0x20000000,
+		.flash_page	= 0x3c0,
+	},
+	[ZL80X32_HEXIMAGE_CFG2] = {
+		.name		= "config2",
+		.max_words	= 0x0400,
+		.load_addr	= 0x20000000,
+		.flash_page	= 0x3b0,
+	},
+	[ZL80X32_HEXIMAGE_CFG3] = {
+		.name		= "config3",
+		.max_words	= 0x0400,
+		.load_addr	= 0x20000000,
+		.flash_page	= 0x3a0,
+	},
+	[ZL80X32_HEXIMAGE_CFG4] = {
+		.name		= "config4",
+		.max_words	= 0x0400,
+		.load_addr	= 0x20000000,
+		.flash_page	= 0x390,
+	},
+	[ZL80X32_HEXIMAGE_CFG5] = {
+		.name		= "config5",
+		.max_words	= 0x0400,
+		.load_addr	= 0x20000000,
+		.flash_page	= 0x380,
+	},
+	[ZL80X32_HEXIMAGE_CFG6] = {
+		.name		= "config6",
+		.max_words	= 0x0400,
+		.load_addr	= 0x20000000,
+		.flash_page	= 0x370,
+	},
+};
+
+/* Santity check */
+static_assert(ZL80X32_NUM_HEXIMAGES == ARRAY_SIZE(zl80x32_heximage_info));
+
+/**
  * zl80x32_heximage_alloc - Alloc structure to hold hex-image
  * @nwords: size of buffer in 32-bit words to store data
  *
