@@ -100,6 +100,17 @@ static const struct zl80x32_heximage_info zl80x32_heximage_info[] = {
 /* Santity check */
 static_assert(ZL80X32_NUM_HEXIMAGES == ARRAY_SIZE(zl80x32_heximage_info));
 
+static enum zl80x32_heximage_id zl80x32_get_heximage_id(const char *name)
+{
+	size_t i;
+
+	for (i = 0; i < ZL80X32_NUM_HEXIMAGES; i++)
+		if (!strcasecmp(name, zl80x32_heximage_info[i].name))
+			return i;
+
+	return ZL80X32_HEXIMAGE_INVALID;
+}
+
 /**
  * zl80x32_heximage_alloc - Alloc structure to hold hex-image
  * @nwords: size of buffer in 32-bit words to store data
@@ -205,6 +216,7 @@ struct zl80x32_heximage *zl80x32_heximage_load(struct zl80x32_dev *zldev,
 {
 	struct zl80x32_heximage *image = NULL;
 	struct device *dev = zldev->dev;
+	enum zl80x32_heximage_id id;
 	u32 nwords, count;
 	char line[32];
 	ssize_t len;
@@ -221,6 +233,13 @@ struct zl80x32_heximage *zl80x32_heximage_load(struct zl80x32_dev *zldev,
 	src += len;
 
 	dev_dbg(dev, "Hex-image '%s' found\n", line);
+
+	id = zl80x32_get_heximage_id(line);
+	if (id == ZL80X32_HEXIMAGE_INVALID) {
+		FLASH_ERR_MSG(zldev, extack,
+			      "FW parse error - unknown image type '%s'", line);
+		return ERR_PTR(-EINVAL);
+	}
 
 	/* Fetch image size from input */
 	len = zl80x32_heximage_readline(line, sizeof(line), src, *src_sz);
@@ -246,6 +265,8 @@ struct zl80x32_heximage *zl80x32_heximage_load(struct zl80x32_dev *zldev,
 		FLASH_ERR_MSG(zldev, extack, "Failed to alloc memory");
 		return ERR_PTR(-ENOMEM);
 	}
+
+	image->info = &zl80x32_heximage_info[id];
 
 	/* Load image data */
 	for (count = 0; count < nwords; count++) {
