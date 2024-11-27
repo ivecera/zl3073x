@@ -26,8 +26,6 @@ enum zl80x32_heximage_id {
  * Array that specifies all possible flash image types
  */
 static const struct zl80x32_heximage_info zl80x32_heximage_info[] = {
-	/*                 ID		name		cmd
-	 *                 max_words	load_addr	page	page_copy */
 	[ZL80X32_HEXIMAGE_UTIL] = {
 		.name		= "utility",
 		.max_words	= 0x08c0,
