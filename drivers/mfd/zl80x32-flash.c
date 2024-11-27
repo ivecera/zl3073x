@@ -311,11 +311,12 @@ int zl80x32_flash_update(struct devlink *devlink,
 			 struct devlink_flash_update_params *params,
 			 struct netlink_ext_ack *extack)
 {
+	struct zl80x32_heximage *images[ZL80X32_NUM_HEXIMAGES] = { };
 	struct zl80x32_dev *zldev = devlink_priv(devlink);
-	struct zl80x32_heximage *image;
+	enum zl80x32_heximage_id id;
 	const char *ptr;
 	size_t size;
-	int rc;
+	int rc = 0;
 
 	devlink_flash_update_status_notify(devlink, "Preparing to flash",
 					   params->component, 0, 0);
@@ -323,18 +324,40 @@ int zl80x32_flash_update(struct devlink *devlink,
 	ptr = params->fw->data;
 	size = params->fw->size;
 
+	/* Load all hex-images from firmware bundle */
 	do {
+		struct zl80x32_heximage *image;
+
 		image = zl80x32_heximage_load(zldev, ptr, &size, extack);
 		if (IS_ERR(image)) {
 			rc = PTR_ERR(image);
-			break;
+			if (rc == -ENODATA)
+				break; /* Finish loading */
+
+			/* Otherwise abort flashing and finish */
+			goto finish;
 		}
 
-		zl80x32_heximage_free(image);
+		id = zl80x32_get_heximage_id(image->info->name);
+		images[id] = image;
 	} while (1);
+
+	/* Iterate over the array and perform image specific operation if any */
+	for (id = 0; id < ZL80X32_NUM_HEXIMAGES; id++) {
+		if (images[id]->info->flash_op) {
+			rc = images[id]->info->flash_op(zldev, images[id]);
+			if (rc)
+				goto finish;
+		}
+	}
 
 	devlink_flash_update_status_notify(devlink, "Flashing done",
 					   params->component, 0, 0);
 
-	return 0;
+finish:
+	/* Free allocated hex-images */
+	for (id = 0; id < ZL80X32_NUM_HEXIMAGES; id++)
+		zl80x32_heximage_free(images[id]);
+
+	return rc;
 }
