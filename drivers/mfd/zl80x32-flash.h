@@ -18,13 +18,13 @@ struct zl80x32_heximage;
  * @backup_page: Destination page where should be @flash_page copied
  */
 struct zl80x32_heximage_info {
-	const char		*name;
-	size_t			max_words;
-	int			(*flash_op)(struct zl80x32_dev *zldev,
-					    struct zl80x32_heximage *image);
-	u32			load_addr;
-	u32			flash_page;
-	u32			backup_page;
+	const char	*name;
+	size_t		max_words;
+	int		(*flash_op)(struct zl80x32_dev *zldev,
+				    struct zl80x32_heximage *image);
+	u32		load_addr;
+	u32		flash_page;
+	u32		backup_page;
 };
 
 /**
