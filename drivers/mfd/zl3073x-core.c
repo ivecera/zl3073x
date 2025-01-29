@@ -3,6 +3,7 @@
 #include <linux/bitfield.h>
 #include <linux/mfd/core.h>
 #include <linux/module.h>
+#include <linux/property.h>
 #include <linux/unaligned.h>
 #include <net/devlink.h>
 #include "zl3073x.h"
@@ -732,6 +733,28 @@ int zl3073x_dev_init(struct zl3073x_dev *zldev, u8 dev_id)
 			      "Failed to add sub-devices\n");
 
 		return rc;
+	}
+
+	/* Optionally add PHC devices if they are specified */
+	device_for_each_child_node_scoped(zldev->dev, child) {
+		u8 id;
+
+		if (fwnode_name_eq(child, "phc") &&
+		    !fwnode_property_read_u8(child, "reg", &id)) {
+			struct mfd_cell phc_dev = {
+				.name = "zl3073x-phc",
+				.id = id,
+			};
+
+			rc = devm_mfd_add_devices(zldev->dev,
+						  PLATFORM_DEVID_AUTO, &phc_dev,
+						  1, NULL, 0, NULL);
+			if (rc) {
+				dev_err_probe(zldev->dev, rc,
+					      "Failed to add PHC sub-device\n");
+				return rc;
+			}
+		}
 	}
 
 	return 0;
