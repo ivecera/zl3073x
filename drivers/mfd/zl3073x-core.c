@@ -3,6 +3,7 @@
 #include <linux/bitfield.h>
 #include <linux/mfd/core.h>
 #include <linux/module.h>
+#include <linux/property.h>
 #include <linux/unaligned.h>
 #include <net/devlink.h>
 #include "zl3073x.h"
@@ -16,6 +17,14 @@ ZL3073X_REG16_DEF(revision,		0x0003);
 ZL3073X_REG16_DEF(fw_ver,		0x0005);
 ZL3073X_REG32_DEF(custom_config_ver,	0x0007);
 ZL3073X_REG8_DEF(i2c_device_addr,	0x003e);
+
+/*
+ * Register Map Page 5, DPLL
+ */
+ZL3073X_REG8_IDX_DEF(dpll_mode_refsel,		0x0284, 2, 4);
+#define DPLL_MODE_REFSEL_MODE			GENMASK(2, 0)
+#define DPLL_MODE_REFSEL_MODE_NCO		4
+#define DPLL_MODE_REFSEL_REF			GENMASK(7, 4)
 
 /*
  * Register Map Page 9, Synth and Output
@@ -699,7 +708,7 @@ int zl3073x_dev_init(struct zl3073x_dev *zldev, u8 dev_id)
 	u16 id, revision, fw_ver;
 	struct devlink *devlink;
 	u32 cfg_ver;
-	int rc;
+	int i, rc;
 
 	mutex_init(&zldev->lock);
 
@@ -749,6 +758,36 @@ int zl3073x_dev_init(struct zl3073x_dev *zldev, u8 dev_id)
 			      "Failed to add sub-devices\n");
 
 		return rc;
+	}
+
+	/* Optionally add PHC devices for channels that are running
+	 * in NCO mode.
+	 */
+	for (i = 0; i < ZL3073X_NUM_CHANNELS; i++) {
+		u8 mode, mode_refsel;
+
+		scoped_guard(zl3073x, zldev) {
+			rc = zl3073x_read_dpll_mode_refsel(zldev, i,
+							   &mode_refsel);
+			if (rc)
+				continue;
+		}
+
+		mode = FIELD_GET(DPLL_MODE_REFSEL_MODE, mode_refsel);
+		if (mode == DPLL_MODE_REFSEL_MODE_NCO) {
+			struct mfd_cell phc_dev = MFD_CELL_BASIC("zl3073x-phc",
+								 NULL, NULL,
+								 0, i);
+
+			rc = devm_mfd_add_devices(zldev->dev,
+						  PLATFORM_DEVID_AUTO, &phc_dev,
+						  1, NULL, 0, NULL);
+			if (rc) {
+				dev_err_probe(zldev->dev, rc,
+					      "Failed to add PHC sub-device\n");
+				return rc;
+			}
+		}
 	}
 
 	return 0;
