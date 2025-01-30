@@ -15670,6 +15670,7 @@ M:	Ivan Vecera <ivecera@redhat.com>
 M:	Tariq Haddad <Tariq.Haddad@microchip.com>
 L:	netdev@vger.kernel.org
 S:	Supported
+F:	drivers/dpll/dpll_zl3073x*
 F:	drivers/mfd/zl3073x*
 F:	include/linux/mfd/zl3073x.h
 

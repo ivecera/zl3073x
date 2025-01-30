@@ -3,5 +3,17 @@
 # Generic DPLL drivers configuration
 #
 
+menu "DPLL support"
+
 config DPLL
 	bool
+
+config DPLL_ZL3073X
+	tristate "Microchip ZL80X32 DPLL driver"
+	depends on MFD_ZL3073X_CORE
+	select DPLL
+	help
+	  This driver adds support for DPLL exposed by Microchip Azurite
+	  PLL chip family like ZL80732 etc.
+
+endmenu
