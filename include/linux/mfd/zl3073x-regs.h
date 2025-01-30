@@ -5,6 +5,7 @@
 
 #include <linux/bitfield.h>
 #include <linux/bits.h>
+#include <linux/mfd/zl3073x.h>
 
 /*
  * Register address structure:
@@ -63,6 +64,49 @@
 #define ZL_REG(_page, _offset, _size)					\
 	ZL_REG_IDX(0, _page, _offset, _size, 1, 0)
 
+/*************************
+ * Register Page 2, Status
+ *************************/
+
+#define ZL_REG_REF_MON_STATUS(_idx)					\
+	ZL_REG_IDX(_idx, 2, 0x02, 1, ZL3073X_NUM_INPUT_PINS, 1)
+#define ZL_REF_MON_STATUS_OK			0 /* all bits zeroed */
+
+#define ZL_REG_DPLL_MON_STATUS(_idx)					\
+	ZL_REG_IDX(_idx, 2, 0x10, 1, ZL3073X_MAX_CHANNELS, 1)
+#define ZL_DPLL_MON_STATUS_LOCK			BIT(0)
+#define ZL_DPLL_MON_STATUS_HO			BIT(1)
+#define ZL_DPLL_MON_STATUS_HO_READY		BIT(2)
+
+#define ZL_REG_DPLL_REFSEL_STATUS(_idx)					\
+	ZL_REG_IDX(_idx, 2, 0x30, 1, ZL3073X_MAX_CHANNELS, 1)
+#define ZL_DPLL_REFSEL_STATUS_REFSEL		GENMASK(3, 0)
+#define ZL_DPLL_REFSEL_STATUS_STATE		GENMASK(6, 4)
+#define ZL_DPLL_REFSEL_STATUS_STATE_LOCK	4
+
+/***********************
+ * Register Page 5, DPLL
+ ***********************/
+
+#define ZL_REG_DPLL_MODE_REFSEL(_idx)					\
+	ZL_REG_IDX(_idx, 5, 0x04, 1, ZL3073X_MAX_CHANNELS, 4)
+#define ZL_DPLL_MODE_REFSEL_MODE		GENMASK(2, 0)
+#define ZL_DPLL_MODE_REFSEL_MODE_FREERUN	0
+#define ZL_DPLL_MODE_REFSEL_MODE_HOLDOVER	1
+#define ZL_DPLL_MODE_REFSEL_MODE_REFLOCK	2
+#define ZL_DPLL_MODE_REFSEL_MODE_AUTO		3
+#define ZL_DPLL_MODE_REFSEL_MODE_NCO		4
+#define ZL_DPLL_MODE_REFSEL_REF			GENMASK(7, 4)
+
+/***********************************
+ * Register Page 9, Synth and Output
+ ***********************************/
+
+#define ZL_REG_SYNTH_PHASE_SHIFT_CTRL		ZL_REG(9, 0x1e, 1)
+#define ZL_REG_SYNTH_PHASE_SHIFT_MASK		ZL_REG(9, 0x1f, 1)
+#define ZL_REG_SYNTH_PHASE_SHIFT_INTVL		ZL_REG(9, 0x20, 1)
+#define ZL_REG_SYNTH_PHASE_SHIFT_DATA		ZL_REG(9, 0x21, 2)
+
 /*******************************
  * Register Page 10, Ref Mailbox
  *******************************/
@@ -72,6 +116,23 @@
 #define ZL_REG_REF_MB_SEM			ZL_REG(10, 0x04, 1)
 #define ZL_REF_MB_SEM_WR			BIT(0)
 #define ZL_REF_MB_SEM_RD			BIT(1)
+
+/********************************
+ * Register Page 12, DPLL Mailbox
+ ********************************/
+
+#define ZL_REG_DPLL_MB_MASK			ZL_REG(12, 0x02, 2)
+
+#define ZL_REG_DPLL_MB_SEM			ZL_REG(12, 0x04, 1)
+#define ZL_DPLL_MB_SEM_WR			BIT(0)
+#define ZL_DPLL_MB_SEM_RD			BIT(1)
+
+#define ZL_REG_DPLL_REF_PRIO(_idx)					\
+	ZL_REG_IDX(_idx, 12, 0x52, 1, ZL3073X_NUM_INPUTS / 2, 1)
+#define ZL_DPLL_REF_PRIO_REF_P			GENMASK(3, 0)
+#define ZL_DPLL_REF_PRIO_REF_N			GENMASK(7, 4)
+#define ZL_DPLL_REF_PRIO_MAX			14
+#define ZL_DPLL_REF_PRIO_NONE			15
 
 /**********************************
  * Register Page 14, Output Mailbox
@@ -84,5 +145,15 @@
 
 #define ZL_REG_OUTPUT_MODE			ZL_REG(14, 0x05, 1)
 #define ZL_OUTPUT_MODE_SIGNAL_FORMAT		GENMASK(7, 4)
+#define ZL_OUTPUT_MODE_SIGNAL_FORMAT_DISABLED	0
+#define ZL_OUTPUT_MODE_SIGNAL_FORMAT_LVDS	1
+#define ZL_OUTPUT_MODE_SIGNAL_FORMAT_DIFF	2
+#define ZL_OUTPUT_MODE_SIGNAL_FORMAT_LOWVCM	3
+#define ZL_OUTPUT_MODE_SIGNAL_FORMAT_2		4
+#define ZL_OUTPUT_MODE_SIGNAL_FORMAT_1P		5
+#define ZL_OUTPUT_MODE_SIGNAL_FORMAT_1N		6
+#define ZL_OUTPUT_MODE_SIGNAL_FORMAT_2_INV	7
+#define ZL_OUTPUT_MODE_SIGNAL_FORMAT_2_NDIV	12
+#define ZL_OUTPUT_MODE_SIGNAL_FORMAT_2_NDIV_INV	15
 
 #endif /* __LINUX_MFD_ZL3073X_REGS_H */
