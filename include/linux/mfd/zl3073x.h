@@ -97,6 +97,7 @@ struct zl3073x_platform_data {
 	struct zl3073x_pin_prop		input_pins[ZL3073X_NUM_IPINS];
 	struct zl3073x_pin_prop		output_pins[ZL3073X_NUM_OPINS];
 	struct zl3073x_output_pair_prop	output_pairs[ZL3073X_NUM_OPAIRS];
+	const char			*fw_init;
 };
 
 struct zl3073x_dev {

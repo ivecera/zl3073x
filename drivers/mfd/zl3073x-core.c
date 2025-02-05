@@ -472,6 +472,103 @@ struct zl3073x_dev *zl3073x_dev_alloc(struct device *dev)
 }
 EXPORT_SYMBOL_GPL(zl3073x_dev_alloc);
 
+static int zl3073x_fw_parse_line(struct zl3073x_dev *zldev, const char *line)
+{
+#define ZL3073X_FW_WHITESPACES_SIZE	3
+#define ZL3073X_FW_COMMAND_SIZE		1
+	const char *ptr = line;
+	char *endp;
+	u32 delay;
+	u16 addr;
+	u8 val;
+
+	switch (ptr[0]) {
+	case 'X':
+		/* The line looks like this:
+		 * X , ADDR , VAL
+		 * Where:
+		 *  - X means that is a command that needs to be executed
+		 *  - ADDR represents the addr and is always 2 bytes and the
+		 *         value is in hex, for example 0x0232
+		 *  - VAL represents the value that is written and is always 1
+		 *        byte and the value is in hex, for example 0x12
+		 */
+		ptr += ZL3073X_FW_COMMAND_SIZE;
+		ptr += ZL3073X_FW_WHITESPACES_SIZE;
+		addr = simple_strtoul(ptr, &endp, 16);
+
+		ptr = endp;
+		ptr += ZL3073X_FW_WHITESPACES_SIZE;
+		val = simple_strtoul(ptr, NULL, 16);
+
+		/* Write requested value to given register */
+		return zl3073x_write_reg(zldev, addr, 1, &val);
+	case 'W':
+		/* The line looks like this:
+		 * W , DELAY
+		 * Where:
+		 *  - W means that is a wait command
+		 *  - DELAY represents the delay in microseconds and the value
+		 *    is in decimal
+		 */
+		ptr += ZL3073X_FW_COMMAND_SIZE;
+		ptr += ZL3073X_FW_WHITESPACES_SIZE;
+		delay = simple_strtoul(ptr, NULL, 10);
+
+		fsleep(delay);
+		break;
+	default:
+		break;
+	}
+
+	return 0;
+}
+
+static int zl3073x_fw_load(struct zl3073x_dev *zldev)
+{
+	const struct firmware *fw;
+	const char *ptr, *end;
+	char buf[128];
+	int rc;
+
+	rc = request_firmware(&fw, zldev->pdata->fw_init, zldev->dev);
+	if (rc)
+		return rc;
+
+	ptr = fw->data;
+	end = ptr + fw->size;
+	while (ptr < end) {
+		/* Get next end of the line or end of buffer */
+		char *eol = strnchrnul(ptr, end - ptr, '\n');
+		size_t len = eol - ptr;
+
+		/* Check line length */
+		if (len >= sizeof(buf)) {
+			dev_err(zldev->dev, "Line in firmware is too long\n");
+			return -E2BIG;
+		}
+
+		/* Copy line from buffer */
+		memcpy(buf, ptr, len);
+		buf[len] = '\0';
+
+		/* Parse and process the line */
+		rc = zl3073x_fw_parse_line(zldev, buf);
+		if (rc) {
+			dev_err_probe(zldev->dev, rc,
+				      "Failed to parse firmware line\n");
+			break;
+		}
+
+		/* Move to next line */
+		ptr = eol + 1;
+	}
+
+	release_firmware(fw);
+
+	return rc;
+}
+
 int zl3073x_dev_init(struct zl3073x_dev *zldev, u8 dev_id)
 {
 	u16 id, revision, fw_ver;
@@ -503,6 +600,13 @@ int zl3073x_dev_init(struct zl3073x_dev *zldev, u8 dev_id)
 
 	/* Use chip ID and given dev ID as clock ID */
 	zldev->clock_id = (id << 8) | dev_id;
+
+	/* Load firmware if it is given in platform data */
+	if (zldev->pdata->fw_init) {
+		rc = zl3073x_fw_load(zldev);
+		if (rc)
+			return rc;
+	}
 
 	dev_info(zldev->dev, "ChipID(%X), ChipRev(%X), FwVer(%u)\n",
 		 id, revision, fw_ver);
