@@ -293,6 +293,71 @@ zl3073x_dpll_input_pin_state_on_dpll_get(const struct dpll_pin *dpll_pin,
 }
 
 static int
+zl3073x_dpll_input_pin_prio_get(const struct dpll_pin *dpll_pin, void *pin_priv,
+				const struct dpll_device *dpll, void *dpll_priv,
+				u32 *prio, struct netlink_ext_ack *extack)
+{
+	struct zl3073x_dpll *zldpll = dpll_priv;
+	struct zl3073x_dev *zldev = zldpll->mfd;
+	struct zl3073x_dpll_pin *pin = pin_priv;
+	int rc;
+
+	guard(zl3073x)(zldev);
+
+	rc = zl3073x_dpll_ref_prio_get(pin, prio);
+	if (rc)
+		return rc;
+
+	return rc;
+}
+
+static int
+zl3073x_dpll_input_pin_prio_set(const struct dpll_pin *dpll_pin, void *pin_priv,
+				const struct dpll_device *dpll, void *dpll_priv,
+				u32 prio, struct netlink_ext_ack *extack)
+{
+	struct zl3073x_dpll *zldpll = dpll_priv;
+	struct zl3073x_dev *zldev = zldpll->mfd;
+	struct zl3073x_dpll_pin *pin = pin_priv;
+	u8 ref_id, ref_prio;
+	int rc;
+
+	guard(zl3073x)(zldev);
+
+	/* Read channel configuration into mailbox */
+	rc = zl3073x_mb_dpll_read(zldev, zldpll->id);
+	if (rc)
+		return rc;
+
+	/* Get index of the pin */
+	ref_id = zl3073x_dpll_pin_index_get(pin);
+
+	/* Read the current priority to preserve the other nibble */
+	rc = zl3073x_read_dpll_ref_prio(zldev, ref_id / 2, &ref_prio);
+	if (rc)
+		return rc;
+
+	/* Update the priority */
+	if (zl3073x_dpll_is_p_pin(pin)) {
+		ref_prio &= ~DPLL_REF_PRIO_REF_P;
+		ref_prio |= FIELD_PREP(DPLL_REF_PRIO_REF_P, prio);
+	} else {
+		ref_prio &= ~DPLL_REF_PRIO_REF_N;
+		ref_prio |= FIELD_PREP(DPLL_REF_PRIO_REF_N, prio);
+	}
+
+	/* Write the updated priority value */
+	rc = zl3073x_write_dpll_ref_prio(zldev, ref_id / 2 , ref_prio);
+	if (rc)
+		return rc;
+
+	/* Update channel configuration from mailbox */
+	rc = zl3073x_mb_dpll_write(zldev, zldpll->id);
+
+	return rc;
+}
+
+static int
 zl3073x_dpll_output_pin_state_on_dpll_get(const struct dpll_pin *dpll_pin,
 					  void *pin_priv,
 					  const struct dpll_device *dpll,
@@ -390,6 +455,8 @@ zl3073x_dpll_mode_get(const struct dpll_device *dpll, void *dpll_priv,
 
 static const struct dpll_pin_ops zl3073x_dpll_input_pin_ops = {
 	.direction_get = zl3073x_dpll_pin_direction_get,
+	.prio_get = zl3073x_dpll_input_pin_prio_get,
+	.prio_set = zl3073x_dpll_input_pin_prio_set,
 	.state_on_dpll_get = zl3073x_dpll_input_pin_state_on_dpll_get,
 };
 
@@ -530,6 +597,7 @@ zl3073x_dpll_fill_pin_properties(struct zl3073x_dpll_pin *pin)
 
 	if (zl3073x_dpll_is_input_pin(pin)) {
 		props->type = DPLL_PIN_TYPE_EXT;
+		props->capabilities = DPLL_PIN_CAPABILITIES_PRIORITY_CAN_CHANGE;
 	} else {
 		props->type = DPLL_PIN_TYPE_GNSS;
 	}
