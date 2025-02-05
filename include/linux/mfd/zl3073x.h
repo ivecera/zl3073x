@@ -4,13 +4,107 @@
 #define __LINUX_MFD_ZL3073X_H
 
 #include <linux/device.h>
+#include <linux/dpll.h>
 #include <linux/regmap.h>
 
+/*
+ * Hardware limits for ZL3073x chip family
+ */
+#define ZL3073X_NUM_CHANNELS	2
+#define ZL3073X_NUM_IPINS	10
+#define ZL3073X_NUM_OPINS	20
+#define ZL3073X_NUM_OPAIRS	(ZL3073X_NUM_OPINS / 2)
+#define ZL3073X_NUM_PINS	(ZL3073X_NUM_IPINS + ZL3073X_NUM_OPINS)
+#define ZL3073X_NUM_SYNTHS	5
+
+/**
+ * ZL3073X_IS_INPUT_PIN - check if the pin is input one
+ * _pin: pin number to check
+ *
+ * Returns true if the pin number is input one
+ */
+#define ZL3073X_IS_INPUT_PIN(_pin)	((_pin) >= ZL3073X_NUM_OPINS)
+
+/**
+ * ZL3073X_IS_N_PIN - check if the pin is N-pin
+ * _pin: pin number to check
+ *
+ * Returns true if the pin is N-pin
+ */
+#define ZL3073X_IS_N_PIN(_pin)	((_pin) & 1)
+
+/**
+ * ZL3073X_IS_P_PIN - check if the pin is P-pin
+ * _pin: pin number to check
+ *
+ * Returns true if te pin is P-pin
+ */
+#define ZL3073X_IS_P_PIN(_pin)	(!ZL3073X_IS_N_PIN(_pin))
+
+enum zl3073x_output_pair_type {
+	ZL3073X_SINGLE_ENDED_IN_PHASE,	/* CMOS in phase		*/
+	ZL3073X_SINGLE_ENDED_DIVIDED,	/* CMOS N divided		*/
+	ZL3073X_DIFFERENTIAL,		/* programmable diff or LVDS	*/
+};
+
+enum zl3073x_output_pair_freq_type {
+	ZL3073X_SYNCE,
+	ZL3073X_SYNCE_1HZ_FIXED,
+	ZL3073X_PTP,
+	ZL3073X_25MHZ_FIXED,
+	ZL3073X_10MHZ_FIXED_EPPS,
+	ZL3073X_1HZ_FIXED,
+};
+
+/**
+ * struct zl3073x_pin_prop - pin properties
+ * name: pin name
+ * type: pin type
+ */
+struct zl3073x_pin_prop {
+	const char		*name;
+	enum dpll_pin_type	type;
+};
+
+#define ZL3037X_PIN_PROP(_name, _type) {	\
+	.name = _name,				\
+	.type = _type,				\
+}
+
+
+/**
+ * struct zl3073x_output_pair_prop - output pin pair properties
+ */
+struct zl3073x_output_pair_prop {
+	enum zl3073x_output_pair_type		type;
+	enum zl3073x_output_pair_freq_type	freq_type;
+};
+
+#define ZL3073X_OUTPUT_PAIR_PROP(_type, _freq_type) {	\
+	.type = _type,					\
+	.freq_type = _freq_type,			\
+}
+
+/**
+ * struct zl3073x_platform_data - optional platform data
+ * @dpll_types: type of particular DPLL
+ * @input_pins: properties of input pins
+ * @output_pins: properties of output pins
+ * @output_pairs: types of output pin pairs
+ */
+struct zl3073x_platform_data {
+	enum dpll_type			dpll_types[ZL3073X_NUM_CHANNELS];
+	struct zl3073x_pin_prop		input_pins[ZL3073X_NUM_IPINS];
+	struct zl3073x_pin_prop		output_pins[ZL3073X_NUM_OPINS];
+	struct zl3073x_output_pair_prop	output_pairs[ZL3073X_NUM_OPAIRS];
+};
+
 struct zl3073x_dev {
-	struct device		*dev;
-	struct regmap		*regmap;
-	u64			clock_id;
-	struct mutex		lock;
+	struct device				*dev;
+	struct regmap				*regmap;
+	u64					clock_id;
+	const struct zl3073x_platform_data	*pdata;
+	struct mutex				lock;
 };
 
 /**
