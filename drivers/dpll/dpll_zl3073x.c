@@ -300,6 +300,71 @@ zl3073x_dpll_input_pin_state_on_dpll_get(const struct dpll_pin *dpll_pin,
 	return rc;
 }
 
+static int
+zl3073x_dpll_input_pin_prio_get(const struct dpll_pin *dpll_pin, void *pin_priv,
+				const struct dpll_device *dpll, void *dpll_priv,
+				u32 *prio, struct netlink_ext_ack *extack)
+{
+	struct zl3073x_dpll *zldpll = dpll_priv;
+	struct zl3073x_dev *zldev = zldpll->mfd;
+	struct zl3073x_dpll_pin *pin = pin_priv;
+	int rc;
+
+	guard(zl3073x)(zldev);
+
+	rc = zl3073x_dpll_ref_prio_get(pin, prio);
+	if (rc)
+		return rc;
+
+	return rc;
+}
+
+static int
+zl3073x_dpll_input_pin_prio_set(const struct dpll_pin *dpll_pin, void *pin_priv,
+				const struct dpll_device *dpll, void *dpll_priv,
+				u32 prio, struct netlink_ext_ack *extack)
+{
+	struct zl3073x_dpll *zldpll = dpll_priv;
+	struct zl3073x_dev *zldev = zldpll->mfd;
+	struct zl3073x_dpll_pin *pin = pin_priv;
+	u8 ref_id, ref_prio;
+	int rc;
+
+	guard(zl3073x)(zldev);
+
+	/* Read channel configuration into mailbox */
+	rc = zl3073x_mb_dpll_read(zldev, zldpll->id);
+	if (rc)
+		return rc;
+
+	/* Get ref id for the pin */
+	ref_id = zl3073x_dpll_pin_ref_id_get(pin->index);
+
+	/* Read the current priority to preserve the other nibble */
+	rc = zl3073x_read_dpll_ref_prio(zldev, ref_id, &ref_prio);
+	if (rc)
+		return rc;
+
+	/* Update the priority */
+	if (ZL3073X_IS_P_PIN(ref_id)) {
+		ref_prio &= ~DPLL_REF_PRIO_REF_P;
+		ref_prio |= FIELD_PREP(DPLL_REF_PRIO_REF_P, prio);
+	} else {
+		ref_prio &= ~DPLL_REF_PRIO_REF_N;
+		ref_prio |= FIELD_PREP(DPLL_REF_PRIO_REF_N, prio);
+	}
+
+	/* Write the updated priority value */
+	rc = zl3073x_write_dpll_ref_prio(zldev, ref_id, ref_prio);
+	if (rc)
+		return rc;
+
+	/* Update channel configuration from mailbox */
+	rc = zl3073x_mb_dpll_write(zldev, zldpll->id);
+
+	return rc;
+}
+
 static u8
 zl3073x_dpll_pin_synth_get(struct zl3073x_dpll_pin *pin)
 {
@@ -422,6 +487,8 @@ zl3073x_dpll_mode_get(const struct dpll_device *dpll, void *dpll_priv,
 
 static const struct dpll_pin_ops zl3073x_dpll_input_pin_ops = {
 	.direction_get = zl3073x_dpll_pin_direction_get,
+	.prio_get = zl3073x_dpll_input_pin_prio_get,
+	.prio_set = zl3073x_dpll_input_pin_prio_set,
 	.state_on_dpll_get = zl3073x_dpll_input_pin_state_on_dpll_get,
 };
 
@@ -442,6 +509,7 @@ zl3073x_dpll_fill_pin_properties(struct zl3073x_dpll_pin *pin)
 	struct zl3073x_dev *zldev = pin_to_dev(pin);
 	const struct zl3073x_pin_prop *pin_prop;
 	struct dpll_pin_frequency *freq;
+	unsigned long capabilities;
 	u8 idx = pin->index;
 	u32 num_freq;
 
@@ -449,12 +517,14 @@ zl3073x_dpll_fill_pin_properties(struct zl3073x_dpll_pin *pin)
 
 	if (ZL3073X_IS_INPUT_PIN(idx)) {
 		pin_prop = &zldev->pdata->input_pins[idx - ZL3073X_NUM_OPINS];
+		capabilities = DPLL_PIN_CAPABILITIES_PRIORITY_CAN_CHANGE;
 		num_freq = ARRAY_SIZE(input_freq_ranges);
 		freq = input_freq_ranges;
 	} else {
 		u8 pair = zl3073x_dpll_pin_pair_get(pin->index);
 
 		pin_prop = &zldev->pdata->output_pins[idx];
+		capabilities = 0;
 
 		switch (zldev->pdata->output_pairs[pair].freq_type) {
 		case ZL3073X_SYNCE:
@@ -482,6 +552,7 @@ zl3073x_dpll_fill_pin_properties(struct zl3073x_dpll_pin *pin)
 	}
 
 	pin->props.board_label = pin_prop->name;
+	pin->props.capabilities = capabilities;
 	pin->props.type = pin_prop->type;
 	pin->props.freq_supported_num = num_freq;
 	pin->props.freq_supported = freq;
