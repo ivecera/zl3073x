@@ -85,6 +85,14 @@ ZL3073X_REG8_IDX_DEF(dpll_ref_prio,		0x652, ZL3073X_NUM_IPINS/2, 1);
 #define DPLL_REF_PRIO_REF_N			GENMASK(7, 4)
 #define DPLL_REF_PRIO_INVALID			0xf
 
+/*
+ * Register Map Page 14, Output Mailbox
+ */
+ZL3073X_REG32_DEF(output_div,			0x70c);
+ZL3073X_REG32_DEF(output_width,			0x710);
+ZL3073X_REG32_DEF(output_esync_period,		0x714);
+ZL3073X_REG32_DEF(output_esync_width,		0x718);
+
 /**
  * struct zl3073x_dpll_pin - DPLL pin
  * dpll_pin: pointer to registered dpll_pin
@@ -552,6 +560,190 @@ zl3073x_dpll_pin_synth_get(struct zl3073x_dpll_pin *pin)
 }
 
 static int
+zl3073x_dpll_output_pin_frequency_get(const struct dpll_pin *dpll_pin,
+				      void *pin_priv,
+				      const struct dpll_device *dpll,
+				      void *dpll_priv, u64 *frequency,
+				      struct netlink_ext_ack *extack)
+{
+	struct zl3073x_dpll *zldpll = dpll_priv;
+	struct zl3073x_dev *zldev = zldpll->mfd;
+	struct zl3073x_dpll_pin *pin = pin_priv;
+	enum zl3073x_output_pair_type pin_type;
+	u64 synth_freq;
+	u32 output_div;
+	u8 synth;
+	int rc;
+
+	guard(zl3073x)(zldev);
+
+	synth = zl3073x_dpll_pin_synth_get(pin);
+	synth_freq = zl3073x_synth_freq_get(zldev, synth);
+
+	/* Read output configuration into mailbox */
+	rc = zl3073x_mb_output_read(zldev, pin->index / 2);
+	if (rc)
+		return rc;
+
+	/* Get divisor */
+	rc = zl3073x_read_output_div(zldev, &output_div);
+	if (rc)
+		return rc;
+
+	pin_type = zldev->pdata->output_pairs[pin->index  / 2].type;
+
+	switch (pin_type) {
+	case ZL3073X_SINGLE_ENDED_DIVIDED:
+		if (ZL3073X_IS_P_PIN(pin->index)) {
+			/* P-pin */
+			*frequency = div_u64(synth_freq, output_div);
+		} else {
+			/* N-pin */
+			u32 esync_period;
+			u64 divisor;
+
+			rc = zl3073x_read_output_esync_period(zldev,
+							      &esync_period);
+			if (rc)
+				return rc;
+
+			divisor = mul_u32_u32(output_div, esync_period);
+			*frequency = div64_u64(synth_freq, divisor);
+		}
+		break;
+	case ZL3073X_SINGLE_ENDED_IN_PHASE:
+	case ZL3073X_DIFFERENTIAL:
+		*frequency = div_u64(synth_freq, output_div);
+		break;
+	default:
+		WARN(1, "Unknown output pin type: %u", pin_type);
+	}
+
+	return rc;
+}
+
+static int
+zl3073x_dpll_output_pin_frequency_set(const struct dpll_pin *dpll_pin,
+				      void *pin_priv,
+				      const struct dpll_device *dpll,
+				      void *dpll_priv, u64 frequency,
+				      struct netlink_ext_ack *extack)
+{
+	struct zl3073x_dpll *zldpll = dpll_priv;
+	struct zl3073x_dev *zldev = zldpll->mfd;
+	struct zl3073x_dpll_pin *pin = pin_priv;
+	enum zl3073x_output_pair_type pair_type;
+	u32 i, output_div, output_p_freq;
+	u64 synth_freq;
+	u8 synth;
+	int rc;
+
+	/* Do not allow to set frequency on internal oscilator pin type */
+	if (pin->props.type == DPLL_PIN_TYPE_INT_OSCILLATOR)
+		return -EINVAL;
+
+	guard(zl3073x)(zldev);
+
+	synth = zl3073x_dpll_pin_synth_get(pin);
+	synth_freq = zl3073x_synth_freq_get(zldev, synth);
+
+	for (i = 0; i < pin->props.freq_supported_num; i++)
+		if (pin->props.freq_supported[i].min <= frequency &&
+		    pin->props.freq_supported[i].max >= frequency)
+			break;
+
+	if (i == pin->props.freq_supported_num)
+		return -EINVAL;
+
+	/* Read output configuration into mailbox */
+	rc = zl3073x_mb_output_read(zldev, pin->index / 2);
+	if (rc)
+		return rc;
+
+	/* Get divisor */
+	rc = zl3073x_read_output_div(zldev, &output_div);
+	if (rc)
+		return rc;
+
+	/* Compute output P frequency */
+	output_p_freq = (u32)div_u64(synth_freq, output_div);
+
+	pair_type = zldev->pdata->output_pairs[pin->index  / 2].type;
+	switch (pair_type) {
+	case ZL3073X_SINGLE_ENDED_DIVIDED: {
+		u32 esync_period, output_n_freq;
+
+		/* Compute output N frequency */
+		rc = zl3073x_read_output_esync_period(zldev, &esync_period);
+		if (rc)
+			return rc;
+		output_n_freq = output_p_freq / esync_period;
+
+		if (ZL3073X_IS_P_PIN(pin->index)) {
+			/* P-pin */
+			if (frequency <= output_n_freq)
+				return -EINVAL;
+
+			/* Update output divisor */
+			output_div = (u32)div_u64(synth_freq, (u32)frequency);
+			rc = zl3073x_write_output_div(zldev, output_div);
+			if (rc)
+				return rc;
+
+			/* output width == output div */
+			rc = zl3073x_write_output_width(zldev, output_div);
+			if (rc)
+				return rc;
+
+			/* Compute new embedded sync period */
+			esync_period = (u32)div_u64(frequency, output_n_freq);
+		} else {
+			/* N-pin */
+			if (output_p_freq <= frequency)
+				return -EINVAL;
+
+			/* Compute new embedded sync period */
+			esync_period = output_p_freq / (u32)frequency;
+		}
+
+		/* Update embedded sync period */
+		rc = zl3073x_write_output_esync_period(zldev, esync_period);
+		if (rc)
+			return rc;
+
+		/* Embedded sync width == embedded sync period */
+		rc = zl3073x_write_output_esync_width(zldev, esync_period);
+		if (rc)
+			return rc;
+
+		break;
+	}
+	case ZL3073X_SINGLE_ENDED_IN_PHASE:
+	case ZL3073X_DIFFERENTIAL:
+		/* Update output divisor */
+		output_div = (u32)div_u64(synth_freq, frequency);
+		rc = zl3073x_write_output_div(zldev, output_div);
+		if (rc)
+			return rc;
+
+		/* output width == output div */
+		rc = zl3073x_write_output_width(zldev, output_div);
+		if (rc)
+			return rc;
+
+		break;
+	default:
+		WARN(1, "Unknown output pin pair type: %u", pair_type);
+		break;
+	}
+
+	/* Update output configuration from mailbox */
+	rc = zl3073x_mb_output_write(zldev, pin->index / 2);
+
+	return rc;
+}
+
+static int
 zl3073x_dpll_output_pin_state_on_dpll_get(const struct dpll_pin *dpll_pin,
 					  void *pin_priv,
 					  const struct dpll_device *dpll,
@@ -674,6 +866,8 @@ static const struct dpll_pin_ops zl3073x_dpll_input_pin_ops = {
 
 static const struct dpll_pin_ops zl3073x_dpll_output_pin_ops = {
 	.direction_get = zl3073x_dpll_pin_direction_get,
+	.frequency_get = zl3073x_dpll_output_pin_frequency_get,
+	.frequency_set = zl3073x_dpll_output_pin_frequency_set,
 	.state_on_dpll_get = zl3073x_dpll_output_pin_state_on_dpll_get,
 };
 
