@@ -43,7 +43,10 @@ static int zl3073x_spi_probe(struct spi_device *spidev)
 
 	spi_set_drvdata(spidev, zldev);
 
-	return zl3073x_dev_init(zldev);
+	/* Initialize device and use SPI chip select value as dev ID */
+	rc = zl3073x_dev_init(zldev, spi_get_chipselect(spidev, 0));
+
+	return rc;
 }
 
 static void zl3073x_spi_remove(struct spi_device *spidev)
