@@ -138,6 +138,8 @@
 #define ZL_REG_REF_RATIO_M			ZL_REG(10, 0x09, 2)
 #define ZL_REG_REF_RATIO_N			ZL_REG(10, 0x0b, 2)
 
+#define ZL_REG_REF_PHASE_OFFSET_COMP		ZL_REG(10, 0x28, 6)
+
 /********************************
  * Register Page 12, DPLL Mailbox
  ********************************/
@@ -181,5 +183,6 @@
 #define ZL_REG_OUTPUT_WIDTH			ZL_REG(14, 0x10, 4)
 #define ZL_REG_OUTPUT_ESYNC_PERIOD		ZL_REG(14, 0x14, 4)
 #define ZL_REG_OUTPUT_ESYNC_WIDTH		ZL_REG(14, 0x18, 4)
+#define ZL_REG_OUTPUT_PHASE_COMP		ZL_REG(14, 0x20, 4)
 
 #endif /* __LINUX_MFD_ZL3073X_REGS_H */
