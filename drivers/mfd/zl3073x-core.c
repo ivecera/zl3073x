@@ -84,6 +84,16 @@ ZL3073X_REG32_DEF(custom_config_ver,	0x0007);
 ZL3073X_REG8_DEF(i2c_device_addr,	0x003e);
 
 /*
+ * Register Map Page 9, Synth and Output
+ */
+ZL3073X_REG8_IDX_DEF(output_ctrl,		0x4a8, ZL3073X_NUM_OPAIRS, 1);
+#define OUTPUT_CTRL_EN				BIT(0)
+#define OUTPUT_CTRL_STOP			BIT(1)
+#define OUTPUT_CTRL_STOP_HIGH			BIT(2)
+#define OUTPUT_CTRL_STOP_HZ			BIT(3)
+#define OUTPUT_CTRL_SYNTH_SEL			GENMASK(6, 4)
+
+/*
  * Register Map Page 10, Ref Mailbox
  */
 ZL3073X_REG16_DEF(ref_mb_mask,			0x502);
@@ -349,6 +359,35 @@ int zl3073x_mb_ref_write(struct zl3073x_dev *zldev, u8 index)
 EXPORT_SYMBOL_GPL(zl3073x_mb_ref_write);
 
 /*
+ * zl3073x_output_pair_synth_get - get synth connected to given output pair
+ * @zldev: device structure pointer
+ * @pair_index: output pair index
+ * @synth: pointer to store synth number
+ *
+ * Context: zl3073x_dev.lock has to be held
+ *
+ * Returns 0 in case of success or negative value in case of error.
+ */
+int zl3073x_output_pair_synth_get(struct zl3073x_dev *zldev, u8 pair_index,
+				  u8 *synth)
+{
+	u8 output_ctrl;
+	int rc;
+
+	if (pair_index >= ZL3073X_NUM_OPAIRS)
+		return -EINVAL;
+
+	rc = zl3073x_read_output_ctrl(zldev, pair_index, &output_ctrl);
+	if (rc)
+		return rc;
+
+	*synth = FIELD_GET(OUTPUT_CTRL_SYNTH_SEL, output_ctrl);
+
+	return rc;
+}
+EXPORT_SYMBOL_GPL(zl3073x_output_pair_synth_get);
+
+/**
  * zl3073x_synth_freq_get - get synth current freq
  * @zldev: device structure pointer
  * @synth: synth order number

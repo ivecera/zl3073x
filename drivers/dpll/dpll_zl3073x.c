@@ -1070,17 +1070,9 @@ zl3073x_dpll_input_pin_prio_set(const struct dpll_pin *dpll_pin, void *pin_priv,
 static int
 zl3073x_dpll_pin_synth_get(struct zl3073x_dpll_pin *pin, u8 *synth)
 {
-	u8 output_ctrl, pair;
-	int rc;
+	u8 pair = zl3073x_dpll_pin_pair_get(pin->index);
 
-	pair = zl3073x_dpll_pin_pair_get(pin->index);
-	rc = zl3073x_read_output_ctrl(pin_to_dev(pin), pair, &output_ctrl);
-	if (rc)
-		return rc;
-
-	*synth = FIELD_GET(OUTPUT_CTRL_SYNTH_SEL, output_ctrl);
-
-	return rc;
+	return zl3073x_output_pair_synth_get(pin_to_dev(pin), pair, synth);
 }
 
 static int

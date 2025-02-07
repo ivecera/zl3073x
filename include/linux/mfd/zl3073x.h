@@ -284,6 +284,8 @@ int zl3073x_mb_synth_write(struct zl3073x_dev *zldev, u8 index);
 /*
  * Common functions used by sub-device drivers
  */
+int zl3073x_output_pair_synth_get(struct zl3073x_dev *zldev, u8 pin_index,
+				  u8 *synth);
 int zl3073x_synth_freq_get(struct zl3073x_dev *zldev, u8 synth,
 			   u64 *synth_freq);
 
