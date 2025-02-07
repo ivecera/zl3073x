@@ -252,4 +252,12 @@ config PTP_S390
 	  driver provides the raw clock value without the delta to
 	  userspace. That way userspace programs like chrony could steer
 	  the kernel clock.
+
+config PTP_1588_CLOCK_ZL3073X
+	tristate "Microchip ZL3073x PHC driver"
+	depends on MFD_ZL3073X_CORE
+	help
+	  This driver adds support for PHC clock exposed by Microchip
+	  Azurite PLL chips like ZL80732 etc.
+
 endmenu
