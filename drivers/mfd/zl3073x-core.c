@@ -83,6 +83,16 @@ ZL3073X_REG32_DEF(custom_config_ver,	0x0007);
 ZL3073X_REG8_DEF(i2c_device_addr,	0x003e);
 
 /*
+ * Register Map Page 9, Synth and Output
+ */
+ZL3073X_REG8_IDX_DEF(output_ctrl,		0x4a8, ZL3073X_NUM_OPAIRS, 1);
+#define OUTPUT_CTRL_EN				BIT(0)
+#define OUTPUT_CTRL_STOP			BIT(1)
+#define OUTPUT_CTRL_STOP_HIGH			BIT(2)
+#define OUTPUT_CTRL_STOP_HZ			BIT(3)
+#define OUTPUT_CTRL_SYNTH_SEL			GENMASK(6, 4)
+
+/*
  * Register Map Page 10, Ref Mailbox
  */
 ZL3073X_REG16_DEF(ref_mb_mask,			0x502);
@@ -569,6 +579,21 @@ static int zl3073x_fw_load(struct zl3073x_dev *zldev)
 	return rc;
 }
 
+static int zl3073x_output_state_fetch(struct zl3073x_dev *zldev, u8 index)
+{
+	u8 output_ctrl;
+	int rc;
+
+	rc = zl3073x_read_output_ctrl(zldev, index, &output_ctrl);
+	if (rc)
+		return rc;
+
+	zldev->output_synth[index] = FIELD_GET(OUTPUT_CTRL_SYNTH_SEL,
+					       output_ctrl);
+
+	return rc;
+}
+
 static int zl3073x_synth_state_fetch(struct zl3073x_dev *zldev, u8 index)
 {
 	u16 base, numerator, denominator;
@@ -619,6 +644,16 @@ static int zl3073x_dev_state_fetch(struct zl3073x_dev *zldev)
 		if (rc) {
 			dev_err(zldev->dev,
 				"Failed to fetch synth state: %pe\n",
+				ERR_PTR(rc));
+			return rc;
+		}
+	}
+
+	for (i = 0; i < ZL3073X_NUM_OUTPUTS; i++) {
+		rc = zl3073x_output_state_fetch(zldev, i);
+		if (rc) {
+			dev_err(zldev->dev,
+				"Failed to fetch output state: %pe\n",
 				ERR_PTR(rc));
 			return rc;
 		}

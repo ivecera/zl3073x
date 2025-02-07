@@ -14,6 +14,7 @@
 #define ZL3073X_NUM_IPINS	10
 #define ZL3073X_NUM_OPINS	20
 #define ZL3073X_NUM_OPAIRS	(ZL3073X_NUM_OPINS / 2)
+#define ZL3073X_NUM_OUTPUTS	(ZL3073X_NUM_OPINS / 2)
 #define ZL3073X_NUM_PINS	(ZL3073X_NUM_IPINS + ZL3073X_NUM_OPINS)
 #define ZL3073X_NUM_SYNTHS	5
 
@@ -109,6 +110,7 @@ struct zl3073x_dev {
 
 	/* Synths' frequencies */
 	u64					synth_freq[ZL3073X_NUM_SYNTHS];
+	u8					output_synth[ZL3073X_NUM_OUTPUTS];
 };
 
 /**
@@ -282,6 +284,22 @@ int zl3073x_mb_ref_read(struct zl3073x_dev *zldev, u8 index);
 int zl3073x_mb_ref_write(struct zl3073x_dev *zldev, u8 index);
 int zl3073x_mb_synth_read(struct zl3073x_dev *zldev, u8 index);
 int zl3073x_mb_synth_write(struct zl3073x_dev *zldev, u8 index);
+
+/*
+ * zl3073x_output_synth_get - get synth connected to given output
+ * @zldev: device structure pointer
+ * @index: output index
+ * @synth: pointer to store synth number
+ *
+ * Context: zl3073x_dev.lock has to be held
+ *
+ * Returns 0 in case of success or negative value in case of error.
+ */
+static inline
+u8 zl3073x_output_synth_get(struct zl3073x_dev *zldev, u8 index)
+{
+	return zldev->output_synth[index];
+}
 
 /**
  * zl3073x_synth_freq_get - get synth current freq
