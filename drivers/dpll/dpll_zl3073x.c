@@ -128,14 +128,6 @@ ZL3073X_REG8_IDX_DEF(dpll_ref_prio,		0x652, ZL3073X_NUM_IPINS/2, 1);
 #define DPLL_REF_PRIO_INVALID			0xf
 
 /*
- * Register Map Page 13, Synth Mailbox
- */
-ZL3073X_REG16_DEF(synth_freq_base,		0x686);
-ZL3073X_REG32_DEF(synth_freq_mult,		0x688);
-ZL3073X_REG16_DEF(synth_freq_m,			0x68c);
-ZL3073X_REG16_DEF(synth_freq_n,			0x68e);
-
-/*
  * Register Map Page 14, Output Mailbox
  */
 ZL3073X_REG8_DEF(output_mode,			0x705);
@@ -1087,41 +1079,6 @@ zl3073x_dpll_pin_synth_get(struct zl3073x_dpll_pin *pin, u8 *synth)
 		return rc;
 
 	*synth = FIELD_GET(OUTPUT_CTRL_SYNTH_SEL, output_ctrl);
-
-	return rc;
-}
-
-static int
-zl3073x_synth_freq_get(struct zl3073x_dev *zldev, u8 synth, u64 *synth_freq)
-{
-	u16 base, numerator, denominator;
-	u32 mult;
-	int rc;
-
-	/* Read synth configuration into mailbox */
-	rc = zl3073x_mb_synth_read(zldev, synth);
-	if (rc)
-		return rc;
-
-	/* The output frequency is determined by the following formula:
-	 * base * multiplier * numerator / denominator
-	 * Therefore get all this number and calculate the output frequency
-	 */
-	rc = zl3073x_read_synth_freq_base(zldev, &base);
-	if (rc)
-		return rc;
-	rc = zl3073x_read_synth_freq_mult(zldev, &mult);
-	if (rc)
-		return rc;
-
-	rc = zl3073x_read_synth_freq_m(zldev, &numerator);
-	if (rc)
-		return rc;
-	rc = zl3073x_read_synth_freq_n(zldev, &denominator);
-	if (rc)
-		return rc;
-
-	*synth_freq = base * mult * numerator / denominator;
 
 	return rc;
 }

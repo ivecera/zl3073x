@@ -281,4 +281,10 @@ int zl3073x_mb_synth_read(struct zl3073x_dev *zldev, u8 index);
 int zl3073x_mb_synth_write(struct zl3073x_dev *zldev, u8 index);
 
 
+/*
+ * Common functions used by sub-device drivers
+ */
+int zl3073x_synth_freq_get(struct zl3073x_dev *zldev, u8 synth,
+			   u64 *synth_freq);
+
 #endif /* __LINUX_MFD_ZL3073X_H */

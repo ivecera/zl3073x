@@ -348,6 +348,52 @@ int zl3073x_mb_ref_write(struct zl3073x_dev *zldev, u8 index)
 }
 EXPORT_SYMBOL_GPL(zl3073x_mb_ref_write);
 
+/*
+ * zl3073x_synth_freq_get - get synth current freq
+ * @zldev: device structure pointer
+ * @synth: synth order number
+ * @synth_freq: pointer to store synth frequency
+ *
+ * Context: zl3073x_dev.lock has to be held
+ *
+ * Returns 0 in case of success or negative value in case of error
+ */
+int zl3073x_synth_freq_get(struct zl3073x_dev *zldev, u8 synth,
+			   u64 *synth_freq)
+{
+	u16 base, numerator, denominator;
+	u32 mult;
+	int rc;
+
+	/* Read synth configuration into mailbox */
+	rc = zl3073x_mb_synth_read(zldev, synth);
+	if (rc)
+		return rc;
+
+	/* The output frequency is determined by the following formula:
+	 * base * multiplier * numerator / denominator
+	 * Therefore get all this number and calculate the output frequency
+	 */
+	rc = zl3073x_read_synth_freq_base(zldev, &base);
+	if (rc)
+		return rc;
+	rc = zl3073x_read_synth_freq_mult(zldev, &mult);
+	if (rc)
+		return rc;
+
+	rc = zl3073x_read_synth_freq_m(zldev, &numerator);
+	if (rc)
+		return rc;
+	rc = zl3073x_read_synth_freq_n(zldev, &denominator);
+	if (rc)
+		return rc;
+
+	*synth_freq = base * mult * numerator / denominator;
+
+	return rc;
+}
+EXPORT_SYMBOL_GPL(zl3073x_synth_freq_get);
+
 /**
  * zl3073x_mb_synth_read - read given synth configuration to mailbox
  * @zldev: pointer to device structure
