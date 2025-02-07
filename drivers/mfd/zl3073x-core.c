@@ -569,6 +569,64 @@ static int zl3073x_fw_load(struct zl3073x_dev *zldev)
 	return rc;
 }
 
+static int zl3073x_synth_state_fetch(struct zl3073x_dev *zldev, u8 index)
+{
+	u16 base, numerator, denominator;
+	u32 mult;
+	int rc;
+
+	/* Read synth configuration into mailbox */
+	rc = zl3073x_mb_synth_read(zldev, index);
+	if (rc)
+		return rc;
+
+	/* The output frequency is determined by the following formula:
+	 * base * multiplier * numerator / denominator
+	 * Therefore get all this number and calculate the output frequency
+	 */
+	rc = zl3073x_read_synth_freq_base(zldev, &base);
+	if (rc)
+		return rc;
+
+	rc = zl3073x_read_synth_freq_mult(zldev, &mult);
+	if (rc)
+		return rc;
+
+	rc = zl3073x_read_synth_freq_m(zldev, &numerator);
+	if (rc)
+		return rc;
+
+	rc = zl3073x_read_synth_freq_n(zldev, &denominator);
+	if (rc)
+		return rc;
+
+	zldev->synth_freq[index] = mul_u64_u32_div(mul_u32_u32(base, mult),
+						   numerator, denominator);
+
+	dev_dbg(zldev->dev, "Synth %u frequency: %llu\n", index,
+		zldev->synth_freq[index]);
+
+	return rc;
+}
+
+static int zl3073x_dev_state_fetch(struct zl3073x_dev *zldev)
+{
+	int rc;
+	u8 i;
+
+	for (i = 0; i < ZL3073X_NUM_SYNTHS; i++) {
+		rc = zl3073x_synth_state_fetch(zldev, i);
+		if (rc) {
+			dev_err(zldev->dev,
+				"Failed to fetch synth state: %pe\n",
+				ERR_PTR(rc));
+			return rc;
+		}
+	}
+
+	return rc;
+}
+
 int zl3073x_dev_init(struct zl3073x_dev *zldev, u8 dev_id)
 {
 	u16 id, revision, fw_ver;
@@ -604,6 +662,13 @@ int zl3073x_dev_init(struct zl3073x_dev *zldev, u8 dev_id)
 	/* Load firmware if it is given in platform data */
 	if (zldev->pdata->fw_init) {
 		rc = zl3073x_fw_load(zldev);
+		if (rc)
+			return rc;
+	}
+
+	/* Fetch device state */
+	scoped_guard(zl3073x, zldev) {
+		rc = zl3073x_dev_state_fetch(zldev);
 		if (rc)
 			return rc;
 	}

@@ -106,6 +106,9 @@ struct zl3073x_dev {
 	u64					clock_id;
 	const struct zl3073x_platform_data	*pdata;
 	struct mutex				lock;
+
+	/* Synths' frequencies */
+	u64					synth_freq[ZL3073X_NUM_SYNTHS];
 };
 
 /**
@@ -280,5 +283,17 @@ int zl3073x_mb_ref_write(struct zl3073x_dev *zldev, u8 index);
 int zl3073x_mb_synth_read(struct zl3073x_dev *zldev, u8 index);
 int zl3073x_mb_synth_write(struct zl3073x_dev *zldev, u8 index);
 
+/**
+ * zl3073x_synth_freq_get - get synth current freq
+ * @zldev: device structure pointer
+ * @synth: synth order number
+ *
+ * Returns frequency of given synthetizer
+ */
+static inline
+u64 zl3073x_synth_freq_get(struct zl3073x_dev *zldev, u8 synth)
+{
+	return zldev->synth_freq[synth];
+}
 
 #endif /* __LINUX_MFD_ZL3073X_H */
