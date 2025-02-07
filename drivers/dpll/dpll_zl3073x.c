@@ -37,11 +37,29 @@ ZL3073X_REG8_IDX_DEF(dpll_state_refsel_status,	0x130, ZL3073X_NUM_CHANNELS, 1);
 #define DPLL_STATE_REFSEL_STATUS_STATE_ACQUIRING 3
 #define DPLL_STATE_REFSEL_STATUS_STATE_LOCK	4
 
+ZL3073X_REG32_IDX_DEF(ref_freq,			0x144, ZL3073X_NUM_IPINS, 4);
+
 /*
  * Register Map Page 4, Ref
  */
 ZL3073X_REG8_DEF(ref_phase_err_read_rqst,	0x20f);
 #define REF_PHASE_ERR_READ_RQST_RD		BIT(0)
+
+ZL3073X_REG8_DEF(ref_freq_meas_ctrl,		0x21c);
+#define REF_FREQ_MEAS_CTRL_LATCH		GENMASK(1, 0)
+#define REF_FREQ_MEAS_CTRL_LATCH_REF_FREQ	1
+#define REF_FREQ_MEAS_CTRL_LATCH_REF_FREQ_OFF	2
+#define REF_FREQ_MEAS_CTRL_LATCH_DPLL_FREQ_OFF	3
+
+ZL3073X_REG8_DEF(ref_freq_meas_mask_3_0,	0x21d);
+#define REF_FREQ_MEAS_MASK_3_0(_ref)		BIT(_ref)
+
+ZL3073X_REG8_DEF(ref_freq_meas_mask_4,		0x21e);
+#define REF_FREQ_MEAS_MASK_4(_ref)		BIT((_ref) - 8)
+
+ZL3073X_REG8_DEF(dpll_meas_ref_freq_ctrl,	0x21f);
+#define DPLL_MEAS_REF_FREQ_CTRL_EN		BIT(0)
+#define DPLL_MEAS_REF_FREQ_CTRL_IDX		GENMASK(6, 4)
 
 ZL3073X_REG48_IDX_DEF(ref_phase,		0x220, ZL3073X_NUM_IPINS, 6);
 
@@ -149,6 +167,19 @@ struct zl3073x_dpll_pin {
 	u8				index;
 	enum dpll_pin_state		pin_state;
 	s64				phase_offset;
+	s64				freq_offset;
+};
+
+/*
+ * struct zl3073x_dpll_channel - DPLL channel
+ * dpll_dev: pointer to registered dpll_device
+ * lock_status: last stored lock status
+ * index: index in zl3073x_dpll.dplls array
+ */
+struct zl3073x_dpll_channel {
+	struct dpll_device		*dpll_dev;
+	enum dpll_lock_status		lock_status;
+	u8				index;
 };
 
 /**
@@ -471,6 +502,75 @@ zl3073x_dpll_input_ref_frequency_get(struct zl3073x_dev *zldev, u8 ref_id,
 		*frequency = zl3073x_dpll_input_freqs[f].frequency;
 	else
 		*frequency = 0;
+
+	return rc;
+}
+
+static int
+zl3073x_dpll_input_pin_ffo_get(const struct dpll_pin *dpll_pin, void *pin_priv,
+			       const struct dpll_device *dpll, void *dpll_priv,
+			       s64 *ffo, struct netlink_ext_ack *extack)
+{
+	struct zl3073x_dpll *zldpll = dpll_priv;
+	struct zl3073x_dev *zldev = zldpll->mfd;
+	struct zl3073x_dpll_pin *pin = pin_priv;
+	u8 dpll_meas_ref_freq_ctrl, ref_id;
+	u8 ref_freq_meas_ctrl, ref_mask;
+	s32 freq_offset;
+	int rc;
+
+	/* Take device lock */
+	guard(zl3073x)(zldev);
+
+	/* Get ref id for the pin */
+	ref_id = zl3073x_dpll_pin_ref_id_get(pin->index);
+
+	/* Wait for being ready */
+	rc = zl3073x_wait_clear_bits(zldev, ref_freq_meas_ctrl,
+				     REF_FREQ_MEAS_CTRL_LATCH);
+	if (rc)
+		return rc;
+
+	/* Select channel index in the mask and enable freq measurement */
+	dpll_meas_ref_freq_ctrl = DPLL_MEAS_REF_FREQ_CTRL_EN |
+		FIELD_PREP(DPLL_MEAS_REF_FREQ_CTRL_IDX, zldpll->id);
+	rc = zl3073x_write_dpll_meas_ref_freq_ctrl(zldev,
+						   dpll_meas_ref_freq_ctrl);
+	if (rc)
+		return rc;
+
+	/* Set reference mask
+	 * REF0P,REF0N..REF3P,REF3N are set in ref_freq_meas_mask_3_0 register
+	 * REF4P and REF4N are set in ref_freq_meas_mask_4 register
+	 */
+	if (ref_id < 8) {
+		ref_mask = REF_FREQ_MEAS_MASK_3_0(ref_id);
+		rc = zl3073x_write_ref_freq_meas_mask_3_0(zldev, ref_mask);
+	} else {
+		ref_mask = REF_FREQ_MEAS_MASK_4(ref_id);
+		rc = zl3073x_write_ref_freq_meas_mask_4(zldev, ref_mask);
+	}
+	if (rc)
+		return rc;
+
+	/* Request a read of the freq offset between the dpll and the reference */
+	ref_freq_meas_ctrl = REF_FREQ_MEAS_CTRL_LATCH_DPLL_FREQ_OFF;
+	rc = zl3073x_write_ref_freq_meas_ctrl(zldev, ref_freq_meas_ctrl);
+	if (rc)
+		return rc;
+
+	/* Wait for the command to actually finish */
+	rc = zl3073x_wait_clear_bits(zldev, ref_freq_meas_ctrl,
+                                     REF_FREQ_MEAS_CTRL_LATCH);
+        if (rc)
+                return rc;
+
+	/* Read the frequency offset between DPLL and ref */
+	rc = zl3073x_read_ref_freq(zldev, ref_id, &freq_offset);
+	if (rc)
+		return rc;
+
+	*ffo = freq_offset;
 
 	return rc;
 }
@@ -1586,6 +1686,7 @@ static const struct dpll_pin_ops zl3073x_dpll_input_pin_ops = {
 	.direction_get = zl3073x_dpll_pin_direction_get,
 	.esync_get = zl3073x_dpll_input_pin_esync_get,
 	.esync_set = zl3073x_dpll_input_pin_esync_set,
+	.ffo_get = zl3073x_dpll_input_pin_ffo_get,
 	.frequency_get = zl3073x_dpll_input_pin_frequency_get,
 	.frequency_set = zl3073x_dpll_input_pin_frequency_set,
 	.phase_offset_get = zl3073x_dpll_input_pin_phase_offset_get,
@@ -1833,9 +1934,9 @@ zl3073x_dpll_periodic_work(struct kthread_work *work)
 	 * are constant.
 	 */
 	for (i = 0; i < ZL3073X_NUM_IPINS; i++) {
+		s64 freq_offset, phase_offset;
 		struct zl3073x_dpll_pin *pin;
 		enum dpll_pin_state state;
-		s64 phase_offset;
 		bool pin_changed;
 
 		/* Input pins starts are stored after output pins */
@@ -1858,12 +1959,20 @@ zl3073x_dpll_periodic_work(struct kthread_work *work)
 		if (rc)
 			goto out;
 
+		rc = zl3073x_dpll_input_pin_ffo_get(pin->dpll_pin, pin,
+						    zldpll->dpll_dev, zldpll,
+						    &freq_offset, NULL);
+		if (rc)
+			goto out;
+
 		pin_changed =
 			(state != pin->pin_state) ||
-			(phase_offset != pin->phase_offset);
+			(phase_offset != pin->phase_offset) ||
+			(freq_offset != pin->freq_offset);
 
 		pin->pin_state = state;
 		pin->phase_offset = phase_offset;
+		pin->freq_offset = freq_offset;
 
 		if (pin_changed)
 			dpll_pin_change_ntf(pin->dpll_pin);
