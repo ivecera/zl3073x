@@ -34,6 +34,11 @@
 		};
 	};
 
+	psci {
+		compatible = "arm,psci-1.0";
+		method = "smc";
+	};
+
 	clocks {
 		sys_clk: sys_clk {
 			compatible = "fixed-clock";
@@ -78,7 +83,7 @@
 		clock-frequency = <37500000>;
 	};
 
-	soc {
+	soc: soc {
 		compatible = "simple-bus";
 		#address-cells = <1>;
 		#size-cells = <1>;
@@ -93,6 +98,26 @@
 			clocks = <&clks GCK_GATE_UDPHS>, <&nic_clk>;
 			clock-names = "pclk", "hclk";
 			status = "disabled";
+		};
+
+		usb: usb@300000 {
+			compatible = "microchip,lan966x-dwc3";
+			clocks = <&clks GCK_GATE_UHPHS>;
+			#address-cells = <1>;
+			#size-cells = <1>;
+			ranges;
+			status = "disabled";
+
+			usb_dwc3: usb_dwc3@300000 {
+				compatible = "snps,dwc3";
+				reg = <0x300000 0x80000>;
+				interrupts = <GIC_SPI 82 IRQ_TYPE_LEVEL_HIGH>;
+				phy_type = "utmi";
+				clocks = <&clks GCK_ID_USB_REFCLK>;
+				clock-names = "ref";
+				assigned-clocks = <&clks GCK_ID_USB_REFCLK>;
+				assigned-clock-rates = <100000000>;
+			};
 		};
 
 		switch: switch@e0000000 {
@@ -501,6 +526,17 @@
 			assigned-clocks = <&clks GCK_ID_MCAN1>;
 			assigned-clock-rates = <40000000>;
 			bosch,mram-cfg = <0x4000 0 0 64 0 0 32 32>;
+			status = "disabled";
+		};
+
+		sdmmc0: sdio-host@e0830000 {
+			compatible = "microchip,lan966x-sdhci";
+			reg = <0xe0830000 0x00000300>;
+			interrupts = <GIC_SPI 66 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&clks GCK_ID_SDMMC0>, <&clks GCK_ID_SDMMC0>;
+			clock-names = "hclock", "multclk";
+			assigned-clocks = <&clks GCK_ID_SDMMC0>;
+			assigned-clock-rates = <50000000>;
 			status = "disabled";
 		};
 
