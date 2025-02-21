@@ -427,6 +427,8 @@ struct kszphy_ptp_priv {
 	s64 seconds;
 	/* Lock for accessing seconds */
 	spinlock_t seconds_lock;
+
+	u32 ptp_clock_freq;
 };
 
 struct kszphy_priv {
@@ -3809,6 +3811,57 @@ static int lan8814_config_intr(struct phy_device *phydev)
 	return err;
 }
 
+#define LAN8814_PTP_REF_CLK_CFG			514
+#define LAN8814_PTP_REF_CLK_CFG_SOURCE_M	GENMASK(12, 10)
+#define LAN8814_PTP_REF_CLK_CFG_SOURCE(x)	((x)<<10)
+
+#define LAN8814_PTP_PLL_DIV			323
+#define LAN8814_PTP_PLL_DIV_DIVR_M		GENMASK(14, 10)
+#define LAN8814_PTP_PLL_DIV_DIVR(x)		((x)<<10)
+#define LAN8841_PTP_PLL_DIV_DIVF_M		GENMASK(9, 3)
+#define LAN8841_PTP_PLL_DIV_DIVF(x)		((x)<<3)
+
+static int lan8814_ptp_pll_init(struct phy_device *phydev)
+{
+	struct kszphy_priv *priv = phydev->priv;
+	struct kszphy_ptp_priv *ptp_priv = &priv->ptp_priv;
+	u32 divr, divf;
+	u32 val;
+
+	switch (ptp_priv->ptp_clock_freq) {
+	case 10000000:
+		divr = 0x00;
+		divf = 0x31;
+		break;
+	case 25000000:
+		divr = 0x00;
+		divf = 0x13;
+		break;
+	case 125000000:
+		divr = 0x04;
+		divf = 0x13;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	/* Configure to use external clock source */
+	val = lanphy_read_page_reg(phydev, 4, LAN8814_PTP_REF_CLK_CFG);
+	val &= ~LAN8814_PTP_REF_CLK_CFG_SOURCE_M;
+	val |= LAN8814_PTP_REF_CLK_CFG_SOURCE(2);
+	lanphy_write_page_reg(phydev, 4, LAN8814_PTP_REF_CLK_CFG, val);
+
+	/* Configure to generate 250MHz use by the timestamping unit */
+	val = lanphy_read_page_reg(phydev, 4, LAN8814_PTP_PLL_DIV);
+	val &= ~LAN8814_PTP_PLL_DIV_DIVR_M;
+	val &= ~LAN8841_PTP_PLL_DIV_DIVF_M;
+	val |= LAN8814_PTP_PLL_DIV_DIVR(divr);
+	val |= LAN8841_PTP_PLL_DIV_DIVF(divf);
+	lanphy_write_page_reg(phydev, 4, LAN8814_PTP_PLL_DIV, val);
+
+	return 0;
+}
+
 static void lan8814_ptp_init(struct phy_device *phydev)
 {
 	struct kszphy_priv *priv = phydev->priv;
@@ -3865,6 +3918,8 @@ static void lan8814_ptp_init(struct phy_device *phydev)
 static int lan8814_ptp_probe_once(struct phy_device *phydev)
 {
 	struct lan8814_shared_priv *shared = phydev->shared->priv;
+	struct kszphy_priv *priv = phydev->priv;
+	struct kszphy_ptp_priv *ptp_priv = &priv->ptp_priv;
 
 	/* Initialise shared lock for clock*/
 	mutex_init(&shared->shared_lock);
@@ -3928,6 +3983,17 @@ static int lan8814_ptp_probe_once(struct phy_device *phydev)
 
 	/* Enable ptp to run LTC clock for ptp and gpio 1PPS operation */
 	lanphy_write_page_reg(phydev, 4, PTP_CMD_CTL, PTP_CMD_CTL_PTP_ENABLE_);
+
+	if (!of_property_read_u32(phydev->mdio.dev.of_node,
+				 "microchip,1588-clock-freq",
+				 &ptp_priv->ptp_clock_freq)) {
+		int err;
+
+		err = lan8814_ptp_pll_init(phydev);
+		if (err)
+			return err;
+
+	}
 
 	return 0;
 }
