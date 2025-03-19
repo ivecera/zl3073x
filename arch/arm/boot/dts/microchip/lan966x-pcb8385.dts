@@ -116,6 +116,12 @@
 		function = "fc_shrd13";
 	};
 
+	miim_a_pins: mdio-pins {
+		/* MDC, MDIO */
+		pins =  "GPIO_28", "GPIO_29";
+		function = "miim_a";
+	};
+
 	sgpio_a_pins: sgpio-a-pins {
 		/* SCK, D0, D1, LD */
 		pins = "GPIO_32", "GPIO_33", "GPIO_34", "GPIO_35";
@@ -212,6 +218,82 @@
 	/* UCS2113 at 0x57 */
 };
 
+&mdio0 {
+	pinctrl-0 = <&miim_a_pins>;
+	pinctrl-names = "default";
+	status = "okay";
+
+	phy2: ethernet-phy@7 {
+		reg = <7>;
+		interrupts = <24 IRQ_TYPE_LEVEL_LOW>;
+		interrupt-parent = <&gpio>;
+		microchip,1588-clock-freq = <125000000>;
+	};
+	phy3: ethernet-phy@8 {
+		reg = <8>;
+		interrupts = <24 IRQ_TYPE_LEVEL_LOW>;
+		interrupt-parent = <&gpio>;
+		microchip,1588-clock-freq = <125000000>;
+	};
+	phy4: ethernet-phy@9 {
+		reg = <9>;
+		interrupts = <24 IRQ_TYPE_LEVEL_LOW>;
+		interrupt-parent = <&gpio>;
+		microchip,1588-clock-freq = <125000000>;
+	};
+	phy5: ethernet-phy@10 {
+		reg = <10>;
+		interrupts = <24 IRQ_TYPE_LEVEL_LOW>;
+		interrupt-parent = <&gpio>;
+		microchip,1588-clock-freq = <125000000>;
+	};
+	phy6: ethernet-phy@3 {
+		reg = <3>;
+		interrupts = <24 IRQ_TYPE_LEVEL_LOW>;
+		interrupt-parent = <&gpio>;
+	};
+};
+
+&port0 {
+	reg = <2>;
+	status = "okay";
+	phy-handle = <&phy4>;
+	phy-mode = "qsgmii";
+	phys = <&serdes 0 SERDES6G(1)>;
+};
+
+&port1 {
+	reg = <3>;
+	status = "okay";
+	phy-handle = <&phy5>;
+	phy-mode = "qsgmii";
+	phys = <&serdes 1 SERDES6G(1)>;
+};
+
+&port2 {
+	reg = <0>;
+	status = "okay";
+	phy-handle = <&phy2>;
+	phy-mode = "qsgmii";
+	phys = <&serdes 3 SERDES6G(1)>;
+};
+
+&port3 {
+	reg = <1>;
+	status = "okay";
+	phy-handle = <&phy3>;
+	phy-mode = "qsgmii";
+	phys = <&serdes 3 SERDES6G(1)>;
+};
+
+&port6 {
+	reg = <6>;
+	status = "okay";
+	phy-handle = <&phy6>;
+	phy-mode = "rgmii-id";
+	phys = <&serdes 6 RGMII(1)>;
+};
+
 &sdmmc0 {
 	bus-width = <8>;
 	cap-mmc-highspeed;
@@ -222,6 +304,11 @@
 	no-1-8-v;
 	tx-phase = <0>; /* 180 degrees phase shift */
 	status = "okay";
+};
+
+&serdes {
+	status = "okay";
+	microchip,s1-tx-inverted;
 };
 
 &sgpio {
@@ -245,6 +332,10 @@
 		spi-max-frequency = <2000000>;
 		status = "okay";
 	};
+};
+
+&switch {
+	status = "okay";
 };
 
 &usb {
