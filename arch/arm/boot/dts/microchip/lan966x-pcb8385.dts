@@ -175,6 +175,7 @@
 	eeprom@55 {
 		compatible = "atmel,24c01";
 		reg = <0x55>;
+		status = "okay";
 	};
 };
 
@@ -198,6 +199,31 @@
 		reg = <1>;
 		interrupts = <24 IRQ_TYPE_LEVEL_LOW>;
 		interrupt-parent = <&gpio>;
+	};
+
+	phy3: ethernet-phy@15 {
+		reg = <15>;
+		interrupts = <24 IRQ_TYPE_LEVEL_LOW>;
+		interrupt-parent = <&gpio>;
+		microchip,1588-clock-freq = <125000000>;
+	};
+	phy4: ethernet-phy@16 {
+		reg = <16>;
+		interrupts = <24 IRQ_TYPE_LEVEL_LOW>;
+		interrupt-parent = <&gpio>;
+		microchip,1588-clock-freq = <125000000>;
+	};
+	phy5: ethernet-phy@17 {
+		reg = <17>;
+		interrupts = <24 IRQ_TYPE_LEVEL_LOW>;
+		interrupt-parent = <&gpio>;
+		microchip,1588-clock-freq = <125000000>;
+	};
+	phy6: ethernet-phy@18 {
+		reg = <18>;
+		interrupts = <24 IRQ_TYPE_LEVEL_LOW>;
+		interrupt-parent = <&gpio>;
+		microchip,1588-clock-freq = <125000000>;
 	};
 };
 
@@ -234,6 +260,38 @@
 	phys = <&serdes 2 RGMII(0)>;
 };
 
+&port4 {
+	reg = <6>;
+	status = "okay";
+	phy-handle = <&phy5>;
+	phy-mode = "qsgmii";
+	phys = <&serdes 4 SERDES6G(2)>;
+};
+
+&port5 {
+	reg = <7>;
+	status = "okay";
+	phy-handle = <&phy6>;
+	phy-mode = "qsgmii";
+	phys = <&serdes 5 SERDES6G(2)>;
+};
+
+&port6 {
+	reg = <4>;
+	status = "okay";
+	phy-handle = <&phy3>;
+	phy-mode = "qsgmii";
+	phys = <&serdes 6 SERDES6G(2)>;
+};
+
+&port7 {
+	reg = <5>;
+	status = "okay";
+	phy-handle = <&phy4>;
+	phy-mode = "qsgmii";
+	phys = <&serdes 7 SERDES6G(2)>;
+};
+
 &sdmmc0 {
 	bus-width = <8>;
 	cap-mmc-highspeed;
@@ -248,6 +306,7 @@
 
 &serdes {
 	status = "okay";
+	microchip,s2-tx-inverted;
 };
 
 &sgpio {
