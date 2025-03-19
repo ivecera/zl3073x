@@ -163,6 +163,14 @@
 		i2c-digital-filter-width-ns = <35>;
 		i2c-sda-hold-time-ns = <1500>;
 		status = "okay";
+
+		dpll@70 {
+			compatible = "microchip,zl80732-i2c";
+			reg = <0x70>;
+			#address-cells = <0>;
+			#size-cells = <0>;
+			status = "okay";
+		};
 	};
 };
 
