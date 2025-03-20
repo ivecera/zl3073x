@@ -946,7 +946,9 @@ static void
 zl3073x_dpll_fill_pin_properties_from_fw(struct zl3073x_dpll_pin *pin)
 {
 	struct dpll_pin_properties *props = &pin->props;
+	struct zl3073x_dpll *zldpll = pin_to_dpll(pin);
 	struct fwnode_handle *node;
+	int len;
 
 	/* Get firmware node for the given pin */
 	node = zl3073x_dpll_pin_fwnode_get(pin);
@@ -956,6 +958,37 @@ zl3073x_dpll_fill_pin_properties_from_fw(struct zl3073x_dpll_pin *pin)
 	/* Look for label property and store the value as board label */
 	fwnode_property_read_string(node, "label", &props->board_label);
 
+	/* Read supported frequencies property if they are specified */
+	len = fwnode_property_count_u64(node, "freqs-hz");
+	if (len > 0) {
+		u64 *freqs;
+		int i;
+
+		freqs = kcalloc(len, sizeof(u64), GFP_KERNEL);
+		if (!freqs)
+			goto finish;
+
+		fwnode_property_read_u64_array(node, "freqs-hz", freqs, len);
+
+		props->freq_supported = devm_kcalloc(zldpll->mfd->dev, len,
+						     sizeof(u64), GFP_KERNEL);
+		if (!props->freq_supported) {
+			kfree(freqs);
+			goto finish;
+		}
+		props->freq_supported_num = len;
+
+		for (i = 0; i < len; i++) {
+			struct dpll_pin_frequency freq =
+				DPLL_PIN_FREQUENCY(freqs[i]);
+
+			props->freq_supported[i] = freq;
+		}
+
+		kfree(freqs);
+	}
+
+finish:
 	/* Release firmware node */
 	fwnode_handle_put(node);
 }
