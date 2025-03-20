@@ -403,6 +403,88 @@ static const struct dpll_device_ops zl3073x_dpll_device_ops = {
 	.mode_get = zl3073x_dpll_mode_get,
 };
 
+/**
+ * zl3073x_dpll_pin_fwnode_get - get fwnode for given pin
+ * pin: pointer to pin structure
+ *
+ * The caller is responsible for calling fwnode_handle_put() on the returned
+ * fwnode pointer.
+ *
+ * Returns the firmware node for the given pin if it is present or
+ * NULL if it is missing.
+ */
+static struct fwnode_handle *
+zl3073x_dpll_pin_fwnode_get(struct zl3073x_dpll_pin *pin)
+{
+	struct zl3073x_dpll *zldpll = pin_to_dpll(pin);
+	struct fwnode_handle *pins_node, *pin_node;
+	const char *node_name;
+	u8 idx;
+
+	if (zl3073x_dpll_is_input_pin(pin)) {
+		node_name = "input-pins";
+	} else {
+		node_name = "output-pins";
+	}
+
+	/* Get node containing input or output pins */
+	pins_node = device_get_named_child_node(zldpll->mfd->dev, node_name);
+	if (!pins_node) {
+		dev_dbg(zldpll->mfd->dev, "'%s' sub-node is missing\n",
+			node_name);
+		return NULL;
+	}
+
+	/* Get pin HW index */
+	idx = zl3073x_dpll_pin_index_get(pin);
+
+	/* Enumerate pin nodes and find the requested one */
+	fwnode_for_each_child_node(pins_node, pin_node) {
+		u32 reg;
+
+		if (fwnode_property_read_u32(pin_node, "reg", &reg))
+			continue;
+
+		if (idx == reg)
+			break;
+	}
+
+	/* Release pin parent node */
+	fwnode_handle_put(pins_node);
+
+	if (pin_node)
+		dev_dbg(zldpll->mfd->dev, "fwnode for %s pin %u: %pfw\n",
+			zl3073x_dpll_is_input_pin(pin) ? "input" : "output",
+			idx, pin_node);
+
+	return pin_node;
+}
+
+/**
+ * zl3073x_dpll_fill_pin_properties_from_fw - fill properties from firmware node
+ * @pin: Pin whose properties are filled
+ *
+ * Gets firmware node for the given pin, enumerate its properties and use their
+ * values to initialize given pin properties.
+ */
+static void
+zl3073x_dpll_fill_pin_properties_from_fw(struct zl3073x_dpll_pin *pin)
+{
+	struct dpll_pin_properties *props = &pin->props;
+	struct fwnode_handle *node;
+
+	/* Get firmware node for the given pin */
+	node = zl3073x_dpll_pin_fwnode_get(pin);
+	if (!node)
+		return;
+
+	/* Look for label property and store the value as board label */
+	fwnode_property_read_string(node, "label", &props->board_label);
+
+	/* Release firmware node */
+	fwnode_handle_put(node);
+}
+
 static void
 zl3073x_dpll_fill_pin_package_label(struct zl3073x_dpll_pin *pin)
 {
@@ -454,8 +536,11 @@ zl3073x_dpll_fill_pin_properties(struct zl3073x_dpll_pin *pin)
 
 	zl3073x_dpll_fill_pin_package_label(pin);
 
-	props->phase_range.min = S32_MIN;
-	props->phase_range.max = S32_MAX;
+	pin->props.phase_range.min = S32_MIN;
+	pin->props.phase_range.max = S32_MAX;
+
+	/* Fill properties from corresponding firmware node if it is present */
+	zl3073x_dpll_fill_pin_properties_from_fw(pin);
 }
 
 static int
