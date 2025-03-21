@@ -164,7 +164,7 @@
 		i2c-sda-hold-time-ns = <1500>;
 		status = "okay";
 
-		dpll@70 {
+		dpll0: dpll@70 {
 			compatible = "microchip,zl80732-i2c";
 			reg = <0x70>;
 			#address-cells = <0>;
@@ -353,4 +353,144 @@
 	pinctrl-0 = <&usb_host_a_pins>;
 	pinctrl-names = "default";
 	status = "okay";
+};
+
+&dpll0 {
+	input-pins {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		pin@0 { /* REF0P */
+			compatible = "dpll-pin";
+			reg = <0>;
+
+			label = "SyncE IN M1 CLK1";
+		};
+		pin@1 { /* REF0N */
+			compatible = "dpll-pin";
+			reg = <1>;
+
+			label = "SyncE IN M1 CLK2";
+		};
+		pin@2 { /* REF1P */
+			compatible = "dpll-pin";
+			reg = <2>;
+
+			label = "SyncE IN M2 CLK1";
+		};
+		pin@3 { /* REF1N */
+			compatible = "dpll-pin";
+			reg = <3>;
+
+			label = "SyncE IN M2 CLK2";
+		};
+		pin@4 { /* REF2P */
+			compatible = "dpll-pin";
+			reg = <4>;
+
+			label = "Station CLK IN";
+		};
+		pin@5 { /* REF2N */
+			compatible = "dpll-pin";
+			reg = <5>;
+
+			label = "1PPS IN";
+		};
+		pin@7 { /* REF3N */
+			compatible = "dpll-pin";
+			reg = <7>;
+
+			label = "Feedb 1PPS IN";
+		};
+		pin@8 { /* REF4P */
+			compatible = "dpll-pin";
+			reg = <8>;
+
+			label = "Feedb 25M IN";
+		};
+		pin@9 { /* REF4N */
+			compatible = "dpll-pin";
+			reg = <9>;
+
+			label = "REF_TEST 10M";
+		};
+	};
+
+	output-pins {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		pin@0 { /* OUT0P */
+			compatible = "dpll-pin";
+			reg = <0>;
+
+			label = "Feedb 25M OUT";
+		};
+		pin@1 { /* OUT0N */
+			compatible = "dpll-pin";
+			reg = <1>;
+
+			label = "1PPS OUT";
+		};
+		pin@2 { /* OUT1P */
+			compatible = "dpll-pin";
+			reg = <2>;
+
+			label = "1PPS M1 OUT";
+		};
+		pin@3 { /* OUT1N */
+			compatible = "dpll-pin";
+			reg = <3>;
+
+			label = "1PPS M2 OUT";
+		};
+		pin@4 { /* OUT2P */
+			compatible = "dpll-pin";
+			reg = <4>;
+
+			label = "Station CLK OUT";
+		};
+		pin@6 { /* OUT3P & OUT3N LVDS */
+			compatible = "dpll-pin";
+			reg = <6>;
+
+			label = "CLK125M1 OUT";
+		};
+		pin@8 { /* OUT4P & OUT4N LVDS */
+			compatible = "dpll-pin";
+			reg = <8>;
+
+			label = "CLK125M2 OUT";
+		};
+		pin@12 { /* OUT6P & OUT6N LVDS */
+			compatible = "dpll-pin";
+			reg = <12>;
+
+			label = "SyncE Local OUT";
+		};
+		pin@14 { /* OUT7P & OUT7N LVDS */
+			compatible = "dpll-pin";
+			reg = <14>;
+
+			label = "SyncE Diff M1 OUT";
+		};
+		pin@16 { /* OUT8P & OUT8N LVDS */
+			compatible = "dpll-pin";
+			reg = <16>;
+
+			label = "SyncE Diff M2 OUT";
+		};
+		pin@18 { /* OUT9P */
+			compatible = "dpll-pin";
+			reg = <18>;
+
+			label = "SyncE M1 OUT";
+		};
+		pin@19 { /* OUT9N */
+			compatible = "dpll-pin";
+			reg = <19>;
+
+			label = "SyncE M2 OUT";
+		};
+	};
 };
