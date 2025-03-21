@@ -170,6 +170,8 @@
 			#address-cells = <0>;
 			#size-cells = <0>;
 			status = "okay";
+
+			microchip,dpll-types = "pps", "eec";
 		};
 	};
 };
