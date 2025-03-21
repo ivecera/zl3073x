@@ -422,6 +422,7 @@
 
 			label = "REF_TEST 10M";
 			freqs-hz = /bits/ 64 <10000000 25000000>;
+			esync-control;
 		};
 	};
 
@@ -463,6 +464,7 @@
 
 			label = "Station CLK OUT";
 			freqs-hz = /bits/ 64 <2048000 10000000>;
+			esync-control;
 		};
 		pin@6 { /* OUT3P & OUT3N LVDS */
 			compatible = "dpll-pin";
