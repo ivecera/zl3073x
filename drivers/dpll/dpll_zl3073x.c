@@ -154,6 +154,8 @@ struct zl3073x_dpll_pin {
  * @dev: device pointer
  * @mfd: pointer to multi-function parent device
  * @id: DPLL identifier (0 or 1)
+ * @refsel_mode: reference selection mode
+ * @forced_ref: selected reference in forced reference lock mode
  * @pins: array of pins
  * @kworker: thread of periodic work
  * @work: periodic work
@@ -162,6 +164,8 @@ struct zl3073x_dpll {
 	struct device			*dev;
 	struct zl3073x_dev		*mfd;
 	int				id;
+	u8				refsel_mode;
+	u8				forced_ref;
 	struct dpll_device		*dpll_dev;
 	enum dpll_lock_status		lock_status;
 	struct zl3073x_dpll_pin		pins[ZL3073X_NUM_PINS];
@@ -623,41 +627,45 @@ static int
 zl3073x_dpll_selected_ref_get(struct zl3073x_dpll *zldpll, u8 *ref)
 {
 	struct zl3073x_dev *zldev = zldpll->mfd;
-	u8 refsel_status;
+	u8 value;
 	int rc;
 
-	rc = zl3073x_read_dpll_refsel_status(zldev, zldpll->id, &refsel_status);
-	if (rc)
-		return rc;
+	switch (zldpll->refsel_mode) {
+	case DPLL_MODE_REFSEL_MODE_AUTO:
+		/* For automatic mode read refsel_status register */
+		rc = zl3073x_read_dpll_refsel_status(zldev, zldpll->id, &value);
+		if (rc)
+			return rc;
+		/* Extract selected input reference */
+		*ref = FIELD_GET(DPLL_REFSEL_STATUS_REFSEL, value);
+		break;
+	case DPLL_MODE_REFSEL_MODE_REFLOCK:
+		/* For manual mode read dpll_mode_refsel register */
+		rc = zl3073x_read_dpll_mode_refsel(zldev, zldpll->id, &value);
+		if (rc)
+			return rc;
+		/* Extract manually selected input reference */
+		*ref = FIELD_GET(DPLL_MODE_REFSEL_REF, value);
+		break;
+	default:
+		/* For other modes like NCO, freerun... there is no input ref */
+		*ref = ZL3073X_REF_INVALID;
+		break;
+	}
 
-	*ref = FIELD_GET(DPLL_REFSEL_STATUS_REFSEL, refsel_status);
-
-	return rc;
+	return 0;
 }
 
 static int
 zl3073x_dpll_connected_ref_get(struct zl3073x_dpll *zldpll, u8 *ref)
 {
 	struct zl3073x_dev *zldev = zldpll->mfd;
-	u8 dpll_mode_refsel, mode;
 	int rc;
 
-	rc = zl3073x_read_dpll_mode_refsel(zldev, zldpll->id,
-					   &dpll_mode_refsel);
+	/* Get selected input reference with respect to running mode */
+	rc = zl3073x_dpll_selected_ref_get(zldpll, ref);
 	if (rc)
 		return rc;
-
-	mode = FIELD_GET(DPLL_MODE_REFSEL_MODE, dpll_mode_refsel);
-
-	if (mode == DPLL_MODE_REFSEL_MODE_AUTO) {
-		rc = zl3073x_dpll_selected_ref_get(zldpll, ref);
-		if (rc)
-			return rc;
-	} else if (mode == DPLL_MODE_REFSEL_MODE_REFLOCK) {
-		*ref = FIELD_GET(DPLL_MODE_REFSEL_REF, dpll_mode_refsel);
-	} else {
-		*ref = ZL3073X_REF_INVALID;
-	}
 
 	if (ZL3073X_REF_IS_VALID(*ref)) {
 		u8 ref_status;
@@ -2084,6 +2092,22 @@ zl3073x_dpll_register(struct zl3073x_dpll *zldpll)
 {
 	struct zl3073x_dev *zldev = zldpll->mfd;
 	int rc;
+
+	scoped_guard(zl3073x, zldev) {
+		u8 dpll_mode_refsel;
+
+		/* Read DPLL mode and forcibly selected reference */
+		rc = zl3073x_read_dpll_mode_refsel(zldev, zldpll->id,
+						   &dpll_mode_refsel);
+		if (rc)
+			return rc;
+
+		/* Extract mode and selected input reference */
+		zldpll->refsel_mode = FIELD_GET(DPLL_MODE_REFSEL_MODE,
+						dpll_mode_refsel);
+		zldpll->forced_ref = FIELD_GET(DPLL_MODE_REFSEL_REF,
+					       dpll_mode_refsel);
+	}
 
 	zldpll->dpll_dev = dpll_device_get(zldev->clock_id, zldpll->id,
 					   THIS_MODULE);
