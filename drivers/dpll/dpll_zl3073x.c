@@ -113,7 +113,6 @@ ZL3073X_REG8_IDX_DEF(dpll_ref_prio,		0x652, ZL3073X_NUM_INPUT_PINS/2, 1);
 #define DPLL_REF_PRIO_REF_P			GENMASK(3, 0)
 #define DPLL_REF_PRIO_REF_N			GENMASK(7, 4)
 #define DPLL_REF_PRIO_MAX			14
-#define DPLL_REF_PRIO_INVALID			15
 
 /*
  * Register Map Page 14, Output Mailbox
@@ -148,6 +147,8 @@ struct zl3073x_dpll_pin {
 	char				package_label[8];
 	s64				phase_offset;
 	s64				freq_offset;
+	u8				prio;
+	bool				selectable;
 };
 
 /**
@@ -922,7 +923,7 @@ zl3073x_dpll_input_pin_phase_adjust_set(const struct dpll_pin *dpll_pin,
 }
 
 static int
-zl3073x_dpll_ref_prio_get(struct zl3073x_dpll_pin *pin, u32 *prio)
+zl3073x_dpll_ref_prio_get(struct zl3073x_dpll_pin *pin, u8 *prio)
 {
 	struct zl3073x_dpll *zldpll = pin_to_dpll(pin);
 	struct zl3073x_dev *zldev = zldpll->mfd;
@@ -991,19 +992,14 @@ zl3073x_dpll_input_pin_state_on_dpll_get(const struct dpll_pin *dpll_pin,
 
 	if (mode == DPLL_MODE_REFSEL_MODE_AUTO) {
 		u8 ref_selected;
-		u32 ref_prio;
 
 		rc = zl3073x_dpll_selected_ref_get(zldpll, &ref_selected);
 		if (rc)
 			return rc;
 
-		rc = zl3073x_dpll_ref_prio_get(pin, &ref_prio);
-		if (rc)
-			return rc;
-
 		if (ref_id == ref_selected)
 			*state = DPLL_PIN_STATE_CONNECTED;
-		else if (ref_prio != DPLL_REF_PRIO_INVALID)
+		else if (pin->selectable)
 			*state = DPLL_PIN_STATE_SELECTABLE;
 		else
 			*state = DPLL_PIN_STATE_DISCONNECTED;
@@ -1067,20 +1063,11 @@ zl3073x_dpll_input_pin_prio_get(const struct dpll_pin *dpll_pin, void *pin_priv,
 				const struct dpll_device *dpll, void *dpll_priv,
 				u32 *prio, struct netlink_ext_ack *extack)
 {
-	struct zl3073x_dpll *zldpll = dpll_priv;
-	struct zl3073x_dev *zldev = zldpll->mfd;
 	struct zl3073x_dpll_pin *pin = pin_priv;
-	int rc;
 
-	guard(zl3073x)(zldev);
+	*prio = pin->prio;
 
-	rc = zl3073x_dpll_ref_prio_get(pin, prio);
-	if (rc)
-		return rc;
-
-	*prio = min(*prio, DPLL_REF_PRIO_MAX);
-
-	return rc;
+	return 0;
 }
 
 static int
@@ -1096,6 +1083,14 @@ zl3073x_dpll_input_pin_prio_set(const struct dpll_pin *dpll_pin, void *pin_priv,
 
 	if (prio > DPLL_REF_PRIO_MAX)
 		return -EINVAL;
+
+	/* If the pin is not selectable (disconnected) just save the requested
+	 * priority but do not update HW registers yet.
+	 */
+	if (!pin->selectable) {
+		pin->prio = prio;
+		return 0;
+	}
 
 	guard(zl3073x)(zldev);
 
@@ -1128,6 +1123,9 @@ zl3073x_dpll_input_pin_prio_set(const struct dpll_pin *dpll_pin, void *pin_priv,
 
 	/* Update channel configuration from mailbox */
 	rc = zl3073x_mb_dpll_write(zldev, zldpll->id);
+
+	/* Save updated priority */
+	pin->prio = prio;
 
 	return rc;
 }
@@ -2008,6 +2006,7 @@ zl3073x_dpll_register_input_pin(struct zl3073x_dpll_pin *pin)
 	struct zl3073x_dpll *zldpll = pin_to_dpll(pin);
 	struct zl3073x_dev *zldev = zldpll->mfd;
 	u8 ref;
+	int rc;
 
 	/* Get index of the pin */
 	ref = zl3073x_dpll_pin_index_get(pin);
@@ -2026,6 +2025,17 @@ zl3073x_dpll_register_input_pin(struct zl3073x_dpll_pin *pin)
 		return 0;
 	}
 
+	/* Get current input reference priority */
+	scoped_guard(zl3073x, zldev) {
+		rc = zl3073x_dpll_ref_prio_get(pin, &pin->prio);
+		if (rc)
+			return rc;
+	}
+
+	if (pin->prio > DPLL_REF_PRIO_MAX) {
+		pin->prio = DPLL_REF_PRIO_MAX;
+		pin->selectable = false;
+	}
 
 	/* Register the pin */
 	return zl3073x_dpll_pin_register(pin);
