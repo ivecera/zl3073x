@@ -657,6 +657,50 @@ zl3073x_dpll_selected_ref_get(struct zl3073x_dpll *zldpll, u8 *ref)
 }
 
 static int
+zl3073x_dpll_selected_ref_set(struct zl3073x_dpll *zldpll, u8 ref)
+{
+	struct zl3073x_dev *zldev = zldpll->mfd;
+	u8 mode, mode_refsel;
+	int rc;
+
+	mode = zldpll->refsel_mode;
+
+	switch (mode) {
+	case DPLL_MODE_REFSEL_MODE_REFLOCK: /* Manual mode with ref selected */
+		if (ref == ZL3073X_REF_INVALID) {
+			/* Switch to freerun but keep ref selection */
+			mode = DPLL_MODE_REFSEL_MODE_FREERUN;
+			ref = zldpll->forced_ref;
+		} else if (ref == zldpll->forced_ref) {
+			/* No register update is needed */
+			return 0;
+		}
+		break;
+	case DPLL_MODE_REFSEL_MODE_FREERUN: /* Manual mode without no ref */
+		if (ref == ZL3073X_REF_INVALID)
+			/* No register update is needed */
+			return 0;
+
+		/* Switch to reflock mode and update ref selection */
+		mode = DPLL_MODE_REFSEL_MODE_REFLOCK;
+		break;
+	default:
+		/* For other modes like automatic or NCO ref cannot be selected
+		 * manually
+		 */
+		return -EOPNOTSUPP;
+	}
+
+	mode_refsel = FIELD_PREP(DPLL_MODE_REFSEL_MODE, mode) |
+		      FIELD_PREP(DPLL_MODE_REFSEL_REF, ref);
+
+	/* Update dpll_mode_refsel register */
+	rc = zl3073x_write_dpll_mode_refsel(zldev, zldpll->id, mode_refsel);
+
+	return rc;
+}
+
+static int
 zl3073x_dpll_connected_ref_get(struct zl3073x_dpll *zldpll, u8 *ref)
 {
 	struct zl3073x_dev *zldev = zldpll->mfd;
@@ -968,6 +1012,47 @@ zl3073x_dpll_input_pin_state_on_dpll_get(const struct dpll_pin *dpll_pin,
 	}
 	else {
 		*state = DPLL_PIN_STATE_DISCONNECTED;
+	}
+
+	return rc;
+}
+
+static int
+zl3073x_dpll_input_pin_state_on_dpll_set(const struct dpll_pin *dpll_pin,
+					 void *pin_priv,
+					 const struct dpll_device *dpll,
+					 void *dpll_priv,
+					 enum dpll_pin_state state,
+					 struct netlink_ext_ack *extack)
+{
+	struct zl3073x_dpll *zldpll = dpll_priv;
+	struct zl3073x_dpll_pin *pin = pin_priv;
+	u8 new_ref;
+	int rc;
+
+	switch (zldpll->refsel_mode) {
+	case DPLL_MODE_REFSEL_MODE_REFLOCK:
+	case DPLL_MODE_REFSEL_MODE_FREERUN:
+		if (state == DPLL_PIN_STATE_CONNECTED) {
+			/* Get pin index */
+			new_ref = zl3073x_dpll_pin_index_get(pin);
+		} else if (state == DPLL_PIN_STATE_DISCONNECTED) {
+			/* No reference */
+			new_ref = ZL3073X_REF_INVALID;
+		} else {
+			NL_SET_ERR_MSG_MOD(extack,
+					   "Invalid pin state for manual mode");
+			return -EINVAL;
+		}
+
+		rc = zl3073x_dpll_selected_ref_set(zldpll, new_ref);
+		break;
+	default:
+		/* In other modes we cannot change input reference */
+		NL_SET_ERR_MSG(extack,
+			       "Pin state cannot be changed in current mode");
+		rc = -EOPNOTSUPP;
+		break;
 	}
 
 	return rc;
@@ -1654,6 +1739,7 @@ static const struct dpll_pin_ops zl3073x_dpll_input_pin_ops = {
 	.prio_get = zl3073x_dpll_input_pin_prio_get,
 	.prio_set = zl3073x_dpll_input_pin_prio_set,
 	.state_on_dpll_get = zl3073x_dpll_input_pin_state_on_dpll_get,
+	.state_on_dpll_set = zl3073x_dpll_input_pin_state_on_dpll_set,
 };
 
 static const struct dpll_pin_ops zl3073x_dpll_output_pin_ops = {
@@ -1835,7 +1921,9 @@ zl3073x_dpll_fill_pin_properties(struct zl3073x_dpll_pin *pin)
 
 	if (zl3073x_dpll_is_input_pin(pin)) {
 		props->type = DPLL_PIN_TYPE_EXT;
-		props->capabilities = DPLL_PIN_CAPABILITIES_PRIORITY_CAN_CHANGE;
+		props->capabilities =
+			DPLL_PIN_CAPABILITIES_PRIORITY_CAN_CHANGE |
+			DPLL_PIN_CAPABILITIES_STATE_CAN_CHANGE;
 	} else {
 		props->type = DPLL_PIN_TYPE_GNSS;
 	}
