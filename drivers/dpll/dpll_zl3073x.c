@@ -1007,8 +1007,11 @@ zl3073x_dpll_input_pin_state_on_dpll_get(const struct dpll_pin *dpll_pin,
 		else
 			*state = DPLL_PIN_STATE_DISCONNECTED;
 	}
-	else if (ref_id == ref_forced) {
-		*state = DPLL_PIN_STATE_CONNECTED;
+	else if (mode == DPLL_MODE_REFSEL_MODE_REFLOCK) {
+		if (ref_id == ref_forced)
+			*state = DPLL_PIN_STATE_CONNECTED;
+		else
+			*state = DPLL_PIN_STATE_DISCONNECTED;
 	}
 	else {
 		*state = DPLL_PIN_STATE_DISCONNECTED;
