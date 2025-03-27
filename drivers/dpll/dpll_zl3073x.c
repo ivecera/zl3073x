@@ -112,7 +112,8 @@ ZL3073X_REG32_DEF(ref_esync_div,		0x530);
 ZL3073X_REG8_IDX_DEF(dpll_ref_prio,		0x652, ZL3073X_NUM_INPUT_PINS/2, 1);
 #define DPLL_REF_PRIO_REF_P			GENMASK(3, 0)
 #define DPLL_REF_PRIO_REF_N			GENMASK(7, 4)
-#define DPLL_REF_PRIO_INVALID			0xf
+#define DPLL_REF_PRIO_MAX			14
+#define DPLL_REF_PRIO_INVALID			15
 
 /*
  * Register Map Page 14, Output Mailbox
@@ -1077,6 +1078,8 @@ zl3073x_dpll_input_pin_prio_get(const struct dpll_pin *dpll_pin, void *pin_priv,
 	if (rc)
 		return rc;
 
+	*prio = min(*prio, DPLL_REF_PRIO_MAX);
+
 	return rc;
 }
 
@@ -1090,6 +1093,9 @@ zl3073x_dpll_input_pin_prio_set(const struct dpll_pin *dpll_pin, void *pin_priv,
 	struct zl3073x_dpll_pin *pin = pin_priv;
 	u8 ref_id, ref_prio;
 	int rc;
+
+	if (prio > DPLL_REF_PRIO_MAX)
+		return -EINVAL;
 
 	guard(zl3073x)(zldev);
 
