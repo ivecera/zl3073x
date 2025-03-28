@@ -497,9 +497,12 @@ static void zl3073x_fw_load(struct zl3073x_dev *zldev)
 	char buf[128];
 	int rc;
 
-	rc = request_firmware(&fw, ZL3073X_MFG_FILE, zldev->dev);
+	rc = firmware_request_nowarn(&fw, ZL3073X_MFG_FILE, zldev->dev);
 	if (rc)
 		return;
+
+	dev_info(zldev->dev, "Processing manufacturer file %s...\n",
+		 ZL3073X_MFG_FILE);
 
 	guard(zl3073x)(zldev);
 
