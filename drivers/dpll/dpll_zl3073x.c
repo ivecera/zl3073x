@@ -954,6 +954,45 @@ zl3073x_dpll_ref_prio_get(struct zl3073x_dpll_pin *pin, u8 *prio)
 }
 
 static int
+zl3073x_dpll_ref_prio_set(struct zl3073x_dpll_pin *pin, u8 prio)
+{
+	struct zl3073x_dpll *zldpll = pin_to_dpll(pin);
+	struct zl3073x_dev *zldev = zldpll->mfd;
+	u8 idx, ref_prio;
+	int rc;
+
+	/* Read DPLL configuration into mailbox */
+	rc = zl3073x_mb_dpll_read(zldev, zldpll->id);
+	if (rc)
+		return rc;
+
+	/* Get index of the pin */
+	idx = zl3073x_dpll_pin_index_get(pin);
+
+	/* Read ref prio nibble */
+	rc = zl3073x_read_dpll_ref_prio(zldev, idx / 2, &ref_prio);
+	if (rc)
+		return rc;
+
+	/* Update nibble according pin type */
+	if (zl3073x_dpll_is_p_pin(pin)) {
+		ref_prio &= ~DPLL_REF_PRIO_REF_P;
+		ref_prio |= FIELD_PREP(DPLL_REF_PRIO_REF_P, prio);
+	} else {
+		ref_prio &= ~DPLL_REF_PRIO_REF_N;
+		ref_prio |= FIELD_PREP(DPLL_REF_PRIO_REF_N, prio);
+	}
+
+	/* Write the updated priority value */
+	rc = zl3073x_write_dpll_ref_prio(zldev, idx / 2 , ref_prio);
+	if (rc)
+		return rc;
+
+	/* Update channel configuration from mailbox */
+	return zl3073x_mb_dpll_write(zldev, zldpll->id);
+}
+
+static int
 zl3073x_dpll_input_pin_state_on_dpll_get(const struct dpll_pin *dpll_pin,
 					 void *pin_priv,
 					 const struct dpll_device *dpll,
@@ -1079,56 +1118,24 @@ zl3073x_dpll_input_pin_prio_set(const struct dpll_pin *dpll_pin, void *pin_priv,
 	struct zl3073x_dpll *zldpll = dpll_priv;
 	struct zl3073x_dev *zldev = zldpll->mfd;
 	struct zl3073x_dpll_pin *pin = pin_priv;
-	u8 ref_id, ref_prio;
 	int rc;
 
 	if (prio > DPLL_REF_PRIO_MAX)
 		return -EINVAL;
 
-	/* If the pin is not selectable (disconnected) just save the requested
-	 * priority but do not update HW registers yet.
-	 */
-	if (!pin->selectable) {
-		pin->prio = prio;
-		return 0;
+	/* If the pin is selectable then update HW registers */
+	if (pin->selectable) {
+		guard(zl3073x)(zldev);
+
+		rc = zl3073x_dpll_ref_prio_set(pin, prio);
+		if (rc)
+			return rc;
 	}
 
-	guard(zl3073x)(zldev);
-
-	/* Read channel configuration into mailbox */
-	rc = zl3073x_mb_dpll_read(zldev, zldpll->id);
-	if (rc)
-		return rc;
-
-	/* Get index of the pin */
-	ref_id = zl3073x_dpll_pin_index_get(pin);
-
-	/* Read the current priority to preserve the other nibble */
-	rc = zl3073x_read_dpll_ref_prio(zldev, ref_id / 2, &ref_prio);
-	if (rc)
-		return rc;
-
-	/* Update the priority */
-	if (zl3073x_dpll_is_p_pin(pin)) {
-		ref_prio &= ~DPLL_REF_PRIO_REF_P;
-		ref_prio |= FIELD_PREP(DPLL_REF_PRIO_REF_P, prio);
-	} else {
-		ref_prio &= ~DPLL_REF_PRIO_REF_N;
-		ref_prio |= FIELD_PREP(DPLL_REF_PRIO_REF_N, prio);
-	}
-
-	/* Write the updated priority value */
-	rc = zl3073x_write_dpll_ref_prio(zldev, ref_id / 2 , ref_prio);
-	if (rc)
-		return rc;
-
-	/* Update channel configuration from mailbox */
-	rc = zl3073x_mb_dpll_write(zldev, zldpll->id);
-
-	/* Save updated priority */
+	/* Save priority */
 	pin->prio = prio;
 
-	return rc;
+	return 0;
 }
 
 static u8
