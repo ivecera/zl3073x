@@ -148,7 +148,7 @@ int zl3073x_read_reg(struct zl3073x_dev *zldev, unsigned int reg,
 	u8 buf[6];
 	int rc;
 
-	WARN_ON(!mutex_is_locked(&zldev->lock));
+	lockdep_assert_held(&zldev->lock);
 
 	rc = regmap_bulk_read(zldev->regmap, reg, buf, len);
 	if (rc)
@@ -183,7 +183,7 @@ int zl3073x_write_reg(struct zl3073x_dev *zldev, unsigned int reg,
 {
 	u8 buf[6];
 
-	WARN_ON(!mutex_is_locked(&zldev->lock));
+	lockdep_assert_held(&zldev->lock);
 
 	switch (len) {
 	case 1: buf[0] = *(u8 *)value; break;
