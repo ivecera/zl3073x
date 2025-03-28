@@ -114,6 +114,7 @@ ZL3073X_REG8_IDX_DEF(dpll_ref_prio,		0x652, ZL3073X_NUM_INPUT_PINS/2, 1);
 #define DPLL_REF_PRIO_REF_P			GENMASK(3, 0)
 #define DPLL_REF_PRIO_REF_N			GENMASK(7, 4)
 #define DPLL_REF_PRIO_MAX			14
+#define DPLL_REF_PRIO_NONE			15
 
 /*
  * Register Map Page 14, Output Mailbox
@@ -1086,6 +1087,36 @@ zl3073x_dpll_input_pin_state_on_dpll_set(const struct dpll_pin *dpll_pin,
 		}
 
 		rc = zl3073x_dpll_selected_ref_set(zldpll, new_ref);
+		break;
+	case DPLL_MODE_REFSEL_MODE_AUTO:
+		if (state == DPLL_PIN_STATE_SELECTABLE) {
+			if (pin->selectable)
+				return 0; /* Pin is already selectable */
+
+			/* Restore pin priority in HW */
+			rc = zl3073x_dpll_ref_prio_set(pin, pin->prio);
+			if (rc)
+				return rc;
+
+			/* Mark pin as selectable */
+			pin->selectable = true;
+		} else if (state == DPLL_PIN_STATE_DISCONNECTED) {
+			if (!pin->selectable)
+				return 0; /* Pin is already disconnected */
+
+			/* Set pin priority to none in HW */
+			rc = zl3073x_dpll_ref_prio_set(pin, DPLL_REF_PRIO_NONE);
+			if (rc)
+				return rc;
+
+			/* Mark pin as non-selectable */
+			pin->selectable = false;
+		} else {
+			NL_SET_ERR_MSG(extack,
+				       "Invalid pin state for automatic mode");
+			return -EINVAL;
+		}
+
 		break;
 	default:
 		/* In other modes we cannot change input reference */
