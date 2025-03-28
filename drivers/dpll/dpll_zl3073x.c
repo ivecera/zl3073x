@@ -631,7 +631,7 @@ static int
 zl3073x_dpll_selected_ref_get(struct zl3073x_dpll *zldpll, u8 *ref)
 {
 	struct zl3073x_dev *zldev = zldpll->mfd;
-	u8 value;
+	u8 state, value;
 	int rc;
 
 	switch (zldpll->refsel_mode) {
@@ -640,8 +640,15 @@ zl3073x_dpll_selected_ref_get(struct zl3073x_dpll *zldpll, u8 *ref)
 		rc = zl3073x_read_dpll_refsel_status(zldev, zldpll->id, &value);
 		if (rc)
 			return rc;
-		/* Extract selected input reference */
-		*ref = FIELD_GET(DPLL_REFSEL_STATUS_REFSEL, value);
+
+		/* Extract ref state */
+		state = FIELD_GET(DPLL_REFSEL_STATUS_STATE, value);
+
+		/* Return the reference if the DPLL is locked to it */
+		if (state == DPLL_REFSEL_STATUS_STATE_LOCK)
+			*ref = FIELD_GET(DPLL_REFSEL_STATUS_REFSEL, value);
+		else
+			*ref = ZL3073X_REF_INVALID;
 		break;
 	case DPLL_MODE_REFSEL_MODE_REFLOCK:
 		/* For manual mode read dpll_mode_refsel register */
