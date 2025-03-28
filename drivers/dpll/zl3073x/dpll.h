@@ -25,6 +25,7 @@ struct zl3073x_dpll {
 	u8				id;
 	u8				refsel_mode;
 	u8				forced_ref;
+	u8				check_count;
 	struct dpll_device		*dpll_dev;
 	enum dpll_lock_status		lock_status;
 	struct list_head		pins;
