@@ -1815,9 +1815,10 @@ zl3073x_dpll_pin_fwnode_get(struct zl3073x_dpll_pin *pin)
 	fwnode_handle_put(pins_node);
 
 	if (pin_node)
-		dev_dbg(zldpll->mfd->dev, "fwnode for %s pin %u: %pfw\n",
-			zl3073x_dpll_is_input_pin(pin) ? "input" : "output",
-			idx, pin_node);
+		dev_dbg(zldpll->mfd->dev, "Firmware node for %s%u%c %sfound\n",
+			zl3073x_dpll_is_input_pin(pin) ? "REF" : "OUT", idx / 2,
+			zl3073x_dpll_is_p_pin(pin) ? 'P' : 'N',
+			pin_node ? "" : "NOT ");
 
 	return pin_node;
 }
@@ -2013,15 +2014,15 @@ zl3073x_dpll_register_input_pin(struct zl3073x_dpll_pin *pin)
 
 	/* If the ref is differential then register only for the P-pin */
 	if (zl3073x_input_is_diff(zldev, ref) && zl3073x_dpll_is_n_pin(pin)) {
-		dev_dbg(zldev->dev,
-			"Input pin %u is differential, skipping N-pin\n",
-			pin->index);
+		dev_dbg(zldev->dev, "REF%u is differential, skipping N-pin\n",
+			ref / 2);
 		return 0;
 	}
 
 	/* If the ref is disabled then skip registration */
 	if (!zl3073x_input_is_enabled(zldev, ref)) {
-		dev_dbg(zldev->dev, "Input pin %u is disabled\n", pin->index);
+		dev_dbg(zldev->dev, "REF%u%c is disabled\n", ref / 2,
+			zl3073x_dpll_is_p_pin(pin) ? 'P' : 'N');
 		return 0;
 	}
 
@@ -2060,14 +2061,15 @@ zl3073x_dpll_register_output_pin(struct zl3073x_dpll_pin *pin)
 	 */
 	if (dpll != zldpll->id) {
 		dev_dbg(zldev->dev,
-			"Output %u is associated with different channel\n",
+			"OUT%u's synth is associated with different channel\n",
 			output);
 		return 0;
 	}
 
 	/* If the output is disabled then skip registration */
 	if (!zl3073x_output_is_enabled(zldev, output)) {
-		dev_dbg(zldev->dev, "Output %u is disabled\n", output);
+		dev_dbg(zldev->dev, "OUT%u%c is disabled\n", output,
+			zl3073x_dpll_is_p_pin(pin) ? 'P' : 'N');
 		return 0;
 	}
 
@@ -2075,7 +2077,8 @@ zl3073x_dpll_register_output_pin(struct zl3073x_dpll_pin *pin)
 	switch (zldev->output[output].signal_format) {
 	case OUTPUT_MODE_SIGNAL_FORMAT_DISABLED:
 		/* Output is disabled, nothing to register */
-		dev_dbg(zldev->dev, "Output %u is disabled\n", output);
+		dev_dbg(zldev->dev, "OUT%u%c is disabled by signal format\n",
+			output, zl3073x_dpll_is_p_pin(pin) ? 'P' : 'N');
 		return 0;
 
 	case OUTPUT_MODE_SIGNAL_FORMAT_LVDS:
@@ -2084,7 +2087,7 @@ zl3073x_dpll_register_output_pin(struct zl3073x_dpll_pin *pin)
 		/* Output is differential, skip registration for N-pin */
 		if (zl3073x_dpll_is_n_pin(pin)) {
 			dev_dbg(zldev->dev,
-				"Output %u is differential, skipping N-pin\n",
+				"OUT%u is differential, skipping N-pin\n",
 				output);
 			return 0;
 		}
@@ -2103,7 +2106,7 @@ zl3073x_dpll_register_output_pin(struct zl3073x_dpll_pin *pin)
 		/* Output is one single ended P-pin output */
 		if (zl3073x_dpll_is_n_pin(pin)) {
 			dev_dbg(zldev->dev,
-				"Output %u is P-pin only, skipping N-pin\n",
+				"OUT%u is P-pin only, skipping N-pin\n",
 				output);
 			return 0;
 		}
@@ -2112,7 +2115,7 @@ zl3073x_dpll_register_output_pin(struct zl3073x_dpll_pin *pin)
 		/* Output is one single ended N-pin output */
 		if (zl3073x_dpll_is_p_pin(pin)) {
 			dev_dbg(zldev->dev,
-				"Output %u is N-pin only, skipping P-pin\n",
+				"OUT%u is N-pin only, skipping P-pin\n",
 				output);
 			return 0;
 		}
@@ -2265,18 +2268,14 @@ zl3073x_dpll_periodic_work(struct kthread_work *work)
 {
 	struct zl3073x_dpll *zldpll = container_of(work, struct zl3073x_dpll,
 						   work.work);
-	struct zl3073x_dev *zldev = zldpll->mfd;
 	enum dpll_lock_status lock_status;
 	int i, rc;
 
 	/* Get current lock status for i-th DPLL */
 	rc = zl3073x_dpll_lock_status_get(zldpll->dpll_dev, zldpll,
 					  &lock_status, NULL, NULL);
-	if (rc) {
-		dev_err_probe(zldpll->mfd->dev, rc,
-			      "Failed to get DPLL lock status");
+	if (rc)
 		goto out;
-	}
 
 	/* If lock status was changed then notify DPLL core */
 	if (zldpll->lock_status != lock_status) {
@@ -2324,22 +2323,14 @@ zl3073x_dpll_periodic_work(struct kthread_work *work)
 			goto out;
 
 		if (state != pin->pin_state) {
-			dev_dbg(zldev->dev, "Pin %u state changed to %u\n",
-				pin->index, state);
 			pin->pin_state = state;
 			pin_changed = true;
 		}
 		if (phase_offset != pin->phase_offset) {
-			dev_dbg(zldev->dev,
-				"Pin %u phase offset changed to %llu\n",
-				pin->index, phase_offset);
 			pin->phase_offset = phase_offset;
 			pin_changed = true;
 		}
 		if (freq_offset != pin->freq_offset) {
-			dev_dbg(zldev->dev,
-				"Pin %u frequency offset changed to %llu\n",
-				pin->index, freq_offset);
 			pin->freq_offset = freq_offset;
 			pin_changed = true;
 		}
