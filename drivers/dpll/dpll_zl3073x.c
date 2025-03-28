@@ -24,6 +24,8 @@ ZL3073X_REG8_IDX_DEF(ref_mon_status,		0x102,
 #define REF_MON_STATUS_OK			0	/* all bits zeroed */
 
 ZL3073X_REG8_IDX_DEF(dpll_mon_status,		0x110, ZL3073X_NUM_CHANNELS, 1);
+#define DPLL_MON_STATUS_LOCK			BIT(0)
+#define DPLL_MON_STATUS_HO			BIT(1)
 #define DPLL_MON_STATUS_HO_READY		BIT(2)
 
 ZL3073X_REG8_IDX_DEF(dpll_refsel_status,	0x130, ZL3073X_NUM_CHANNELS, 1);
@@ -1705,37 +1707,25 @@ zl3073x_dpll_lock_status_get(const struct dpll_device *dpll, void *dpll_priv,
 {
 	struct zl3073x_dpll *zldpll = dpll_priv;
 	struct zl3073x_dev *zldev = zldpll->mfd;
-	u8 ho_ready, mon_status, refsel_status, state;
+	u8 mon_status;
 	int rc;
 
 	guard(zl3073x)(zldev);
 
-	rc = zl3073x_read_dpll_refsel_status(zldev, zldpll->id, &refsel_status);
+	rc = zl3073x_read_dpll_mon_status(zldev, zldpll->id, &mon_status);
+
 	if (rc)
 		return rc;
-	state = FIELD_GET(DPLL_REFSEL_STATUS_STATE, refsel_status);
 
-	rc = zl3073x_read_dpll_mon_status(zldev, zldpll->id,
-					  &mon_status);
-	if (rc)
-		return rc;
-	ho_ready = FIELD_GET(DPLL_MON_STATUS_HO_READY, mon_status);
-
-	switch (state) {
-		case DPLL_REFSEL_STATUS_STATE_FREERUN:
-		case DPLL_REFSEL_STATUS_STATE_FASTLOCK:
-		case DPLL_REFSEL_STATUS_STATE_ACQUIRING:
-			*status = DPLL_LOCK_STATUS_UNLOCKED;
-			break;
-		case DPLL_REFSEL_STATUS_STATE_HOLDOVER:
-			*status = DPLL_LOCK_STATUS_HOLDOVER;
-			break;
-		case DPLL_REFSEL_STATUS_STATE_LOCK:
-			if (ho_ready)
-				*status = DPLL_LOCK_STATUS_LOCKED_HO_ACQ;
-			else
-				*status = DPLL_LOCK_STATUS_LOCKED;
-			break;
+	if (FIELD_GET(DPLL_MON_STATUS_LOCK, mon_status)) {
+		if (FIELD_GET(DPLL_MON_STATUS_HO_READY, mon_status))
+			*status = DPLL_LOCK_STATUS_LOCKED_HO_ACQ;
+		else
+			*status = DPLL_LOCK_STATUS_LOCKED;
+	} else if (FIELD_GET(DPLL_MON_STATUS_HO, mon_status)) {
+		*status = DPLL_LOCK_STATUS_HOLDOVER;
+	} else {
+		*status = DPLL_LOCK_STATUS_UNLOCKED;
 	}
 
 	return rc;
