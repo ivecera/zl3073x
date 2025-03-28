@@ -2072,6 +2072,8 @@ zl3073x_dpll_register_input_pin(struct zl3073x_dpll_pin *pin)
 	if (pin->prio > DPLL_REF_PRIO_MAX) {
 		pin->prio = DPLL_REF_PRIO_MAX;
 		pin->selectable = false;
+	} else {
+		pin->selectable = true;
 	}
 
 	/* Register the pin */
