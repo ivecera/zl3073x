@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#define DEBUG
 #include <linux/bitfield.h>
 #include <linux/mfd/core.h>
 #include <linux/module.h>
