@@ -713,7 +713,7 @@ int zl3073x_dev_init(struct zl3073x_dev *zldev, u8 dev_id)
 	u32 cfg_ver;
 	int i, rc;
 
-	mutex_init(&zldev->lock);
+	devm_mutex_init(zldev->dev, &zldev->lock);
 
 	scoped_guard(zl3073x, zldev) {
 		rc = zl3073x_read_id(zldev, &id);
@@ -800,7 +800,6 @@ EXPORT_SYMBOL_GPL(zl3073x_dev_init);
 void zl3073x_dev_exit(struct zl3073x_dev *zldev)
 {
 	devlink_unregister(priv_to_devlink(zldev));
-	mutex_destroy(&zldev->lock);
 }
 EXPORT_SYMBOL_GPL(zl3073x_dev_exit);
 
