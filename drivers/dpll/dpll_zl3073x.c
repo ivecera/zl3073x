@@ -1658,8 +1658,6 @@ zl3073x_dpll_output_pin_phase_adjust_set(const struct dpll_pin *dpll_pin,
 	int phase_comp;
 	int rc;
 
-	guard(zl3073x)(zldev);
-
 	/* Get attached synth */
 	synth = zl3073x_dpll_pin_synth_get(pin);
 
@@ -1670,8 +1668,13 @@ zl3073x_dpll_output_pin_phase_adjust_set(const struct dpll_pin *dpll_pin,
 	 * the given phase adjustment a multiple of half synth clock.
 	 */
 	half_synth_cycle = (int)div_u64(PSEC_PER_SEC, 2 * synth_freq);
-	if ((phase_adjust % half_synth_cycle) != 0)
+
+	if ((phase_adjust % half_synth_cycle) != 0) {
+		NL_SET_ERR_MSG_FMT(extack,
+				   "Phase adjustment value has to be multiple of %d",
+				   half_synth_cycle);
 		return -EINVAL;
+	}
 	phase_adjust /= half_synth_cycle;
 
 	guard(zl3073x)(zldev);
