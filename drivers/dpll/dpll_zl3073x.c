@@ -1083,6 +1083,8 @@ zl3073x_dpll_input_pin_state_on_dpll_set(const struct dpll_pin *dpll_pin,
 	u8 new_ref;
 	int rc;
 
+	guard(zl3073x)(zldpll->mfd);
+
 	switch (zldpll->refsel_mode) {
 	case DPLL_MODE_REFSEL_MODE_REFLOCK:
 	case DPLL_MODE_REFSEL_MODE_FREERUN:
