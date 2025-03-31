@@ -171,7 +171,7 @@
 			#size-cells = <0>;
 			status = "okay";
 
-			microchip,dpll-types = "pps", "eec";
+			dpll-types = "pps", "eec";
 		};
 	};
 };
@@ -365,63 +365,63 @@
 			reg = <0>;
 
 			label = "SyncE IN M1 CLK1";
-			freqs-hz = /bits/ 64 <2500000 25000000>;
+			supported-frequencies = /bits/ 64 <2500000 25000000>;
 		};
 		pin@1 { /* REF0N */
 			compatible = "dpll-pin";
 			reg = <1>;
 
 			label = "SyncE IN M1 CLK2";
-			freqs-hz = /bits/ 64 <2500000 25000000>;
+			supported-frequencies = /bits/ 64 <2500000 25000000>;
 		};
 		pin@2 { /* REF1P */
 			compatible = "dpll-pin";
 			reg = <2>;
 
 			label = "SyncE IN M2 CLK1";
-			freqs-hz = /bits/ 64 <2500000 25000000>;
+			supported-frequencies = /bits/ 64 <2500000 25000000>;
 		};
 		pin@3 { /* REF1N */
 			compatible = "dpll-pin";
 			reg = <3>;
 
 			label = "SyncE IN M2 CLK2";
-			freqs-hz = /bits/ 64 <2500000 25000000>;
+			supported-frequencies = /bits/ 64 <2500000 25000000>;
 		};
 		pin@4 { /* REF2P */
 			compatible = "dpll-pin";
 			reg = <4>;
 
 			label = "Station CLK IN";
-			freqs-hz = /bits/ 64 <10000000>;
+			supported-frequencies = /bits/ 64 <10000000>;
 		};
 		pin@5 { /* REF2N */
 			compatible = "dpll-pin";
 			reg = <5>;
 
 			label = "1PPS IN";
-			freqs-hz = /bits/ 64 <1>;
+			supported-frequencies = /bits/ 64 <1>;
 		};
 		pin@7 { /* REF3N */
 			compatible = "dpll-pin";
 			reg = <7>;
 
 			label = "Feedb 1PPS IN";
-			freqs-hz = /bits/ 64 <1>;
+			supported-frequencies = /bits/ 64 <1>;
 		};
 		pin@8 { /* REF4P */
 			compatible = "dpll-pin";
 			reg = <8>;
 
 			label = "Feedb 25M IN";
-			freqs-hz = /bits/ 64 <25000000>;
+			supported-frequencies = /bits/ 64 <25000000>;
 		};
 		pin@9 { /* REF4N */
 			compatible = "dpll-pin";
 			reg = <9>;
 
 			label = "REF_TEST 10M";
-			freqs-hz = /bits/ 64 <10000000 25000000>;
+			supported-frequencies = /bits/ 64 <10000000 25000000>;
 			esync-control;
 		};
 	};
@@ -435,35 +435,35 @@
 			reg = <0>;
 
 			label = "Feedb 25M OUT";
-			freqs-hz = /bits/ 64 <25000000>;
+			supported-frequencies = /bits/ 64 <25000000>;
 		};
 		pin@1 { /* OUT0N */
 			compatible = "dpll-pin";
 			reg = <1>;
 
 			label = "1PPS OUT";
-			freqs-hz = /bits/ 64 <1>;
+			supported-frequencies = /bits/ 64 <1>;
 		};
 		pin@2 { /* OUT1P */
 			compatible = "dpll-pin";
 			reg = <2>;
 
 			label = "1PPS M1 OUT";
-			freqs-hz = /bits/ 64 <1>;
+			supported-frequencies = /bits/ 64 <1>;
 		};
 		pin@3 { /* OUT1N */
 			compatible = "dpll-pin";
 			reg = <3>;
 
 			label = "1PPS M2 OUT";
-			freqs-hz = /bits/ 64 <1>;
+			supported-frequencies = /bits/ 64 <1>;
 		};
 		pin@4 { /* OUT2P */
 			compatible = "dpll-pin";
 			reg = <4>;
 
 			label = "Station CLK OUT";
-			freqs-hz = /bits/ 64 <2048000 10000000>;
+			supported-frequencies = /bits/ 64 <2048000 10000000>;
 			esync-control;
 		};
 		pin@6 { /* OUT3P & OUT3N LVDS */
@@ -471,49 +471,49 @@
 			reg = <6>;
 
 			label = "CLK125M1 OUT";
-			freqs-hz = /bits/ 64 <125000000>;
+			supported-frequencies = /bits/ 64 <125000000>;
 		};
 		pin@8 { /* OUT4P & OUT4N LVDS */
 			compatible = "dpll-pin";
 			reg = <8>;
 
 			label = "CLK125M2 OUT";
-			freqs-hz = /bits/ 64 <125000000>;
+			supported-frequencies = /bits/ 64 <125000000>;
 		};
 		pin@12 { /* OUT6P & OUT6N LVDS */
 			compatible = "dpll-pin";
 			reg = <12>;
 
 			label = "SyncE Local OUT";
-			freqs-hz = /bits/ 64 <125000000>;
+			supported-frequencies = /bits/ 64 <125000000>;
 		};
 		pin@14 { /* OUT7P & OUT7N LVDS */
 			compatible = "dpll-pin";
 			reg = <14>;
 
 			label = "SyncE Diff M1 OUT";
-			freqs-hz = /bits/ 64 <125000000>;
+			supported-frequencies = /bits/ 64 <125000000>;
 		};
 		pin@16 { /* OUT8P & OUT8N LVDS */
 			compatible = "dpll-pin";
 			reg = <16>;
 
 			label = "SyncE Diff M2 OUT";
-			freqs-hz = /bits/ 64 <125000000>;
+			supported-frequencies = /bits/ 64 <125000000>;
 		};
 		pin@18 { /* OUT9P */
 			compatible = "dpll-pin";
 			reg = <18>;
 
 			label = "SyncE M1 OUT";
-			freqs-hz = /bits/ 64 <125000000>;
+			supported-frequencies = /bits/ 64 <125000000>;
 		};
 		pin@19 { /* OUT9N */
 			compatible = "dpll-pin";
 			reg = <19>;
 
 			label = "SyncE M2 OUT";
-			freqs-hz = /bits/ 64 <125000000>;
+			supported-frequencies = /bits/ 64 <125000000>;
 		};
 	};
 };
