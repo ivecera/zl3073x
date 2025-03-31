@@ -373,6 +373,9 @@ zl3073x_dpll_input_pin_esync_get(const struct dpll_pin *dpll_pin,
 	if (pin->esync_control) {
 		esync->range = esync_freq_ranges;
 		esync->range_num = ARRAY_SIZE(esync_freq_ranges);
+	} else {
+		esync->range = NULL;
+		esync->range_num = 0;
 	}
 
 	return rc;
@@ -1220,6 +1223,9 @@ zl3073x_dpll_output_pin_esync_get(const struct dpll_pin *dpll_pin,
 	if (pin->esync_control) {
 		esync->range = esync_freq_ranges;
 		esync->range_num = ARRAY_SIZE(esync_freq_ranges);
+	} else {
+		esync->range = NULL;
+		esync->range_num = 0;
 	}
 
 	/* Take device lock */
