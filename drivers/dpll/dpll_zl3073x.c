@@ -1902,7 +1902,8 @@ zl3073x_dpll_fill_pin_properties_from_fw(struct zl3073x_dpll_pin *pin)
 					       freqs, len);
 
 		props->freq_supported = devm_kcalloc(zldpll->mfd->dev, len,
-						     sizeof(u64), GFP_KERNEL);
+						     sizeof(struct dpll_pin_frequency),
+						     GFP_KERNEL);
 		if (!props->freq_supported) {
 			kfree(freqs);
 			goto finish;
