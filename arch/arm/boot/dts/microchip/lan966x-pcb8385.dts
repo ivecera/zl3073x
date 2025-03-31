@@ -171,7 +171,7 @@
 			#size-cells = <0>;
 			status = "okay";
 
-			dpll-types = "pps", "eec";
+			dpll-types = "eec", "pps";
 		};
 	};
 };
@@ -365,6 +365,7 @@
 			reg = <0>;
 
 			label = "SyncE IN M1 CLK1";
+			type = "ext";
 			supported-frequencies = /bits/ 64 <2500000 25000000>;
 		};
 		pin@1 { /* REF0N */
@@ -372,6 +373,7 @@
 			reg = <1>;
 
 			label = "SyncE IN M1 CLK2";
+			type = "ext";
 			supported-frequencies = /bits/ 64 <2500000 25000000>;
 		};
 		pin@2 { /* REF1P */
@@ -386,6 +388,7 @@
 			reg = <3>;
 
 			label = "SyncE IN M2 CLK2";
+			type = "ext";
 			supported-frequencies = /bits/ 64 <2500000 25000000>;
 		};
 		pin@4 { /* REF2P */
@@ -393,6 +396,7 @@
 			reg = <4>;
 
 			label = "Station CLK IN";
+			type = "ext";
 			supported-frequencies = /bits/ 64 <10000000>;
 		};
 		pin@5 { /* REF2N */
@@ -400,6 +404,7 @@
 			reg = <5>;
 
 			label = "1PPS IN";
+			type = "ext";
 			supported-frequencies = /bits/ 64 <1>;
 		};
 		pin@7 { /* REF3N */
@@ -407,6 +412,7 @@
 			reg = <7>;
 
 			label = "Feedb 1PPS IN";
+			type = "ext";
 			supported-frequencies = /bits/ 64 <1>;
 		};
 		pin@8 { /* REF4P */
@@ -414,6 +420,7 @@
 			reg = <8>;
 
 			label = "Feedb 25M IN";
+			type = "ext";
 			supported-frequencies = /bits/ 64 <25000000>;
 		};
 		pin@9 { /* REF4N */
@@ -421,6 +428,7 @@
 			reg = <9>;
 
 			label = "REF_TEST 10M";
+			type = "ext";
 			supported-frequencies = /bits/ 64 <10000000 25000000>;
 			esync-control;
 		};
@@ -435,6 +443,7 @@
 			reg = <0>;
 
 			label = "Feedb 25M OUT";
+			type = "gnss";
 			supported-frequencies = /bits/ 64 <25000000>;
 		};
 		pin@1 { /* OUT0N */
@@ -442,6 +451,7 @@
 			reg = <1>;
 
 			label = "1PPS OUT";
+			type = "gnss";
 			supported-frequencies = /bits/ 64 <1>;
 		};
 		pin@2 { /* OUT1P */
@@ -449,6 +459,7 @@
 			reg = <2>;
 
 			label = "1PPS M1 OUT";
+			type = "gnss";
 			supported-frequencies = /bits/ 64 <1>;
 		};
 		pin@3 { /* OUT1N */
@@ -456,6 +467,7 @@
 			reg = <3>;
 
 			label = "1PPS M2 OUT";
+			type = "gnss";
 			supported-frequencies = /bits/ 64 <1>;
 		};
 		pin@4 { /* OUT2P */
@@ -463,6 +475,7 @@
 			reg = <4>;
 
 			label = "Station CLK OUT";
+			type = "gnss";
 			supported-frequencies = /bits/ 64 <2048000 10000000>;
 			esync-control;
 		};
@@ -471,6 +484,7 @@
 			reg = <6>;
 
 			label = "CLK125M1 OUT";
+			type = "gnss";
 			supported-frequencies = /bits/ 64 <125000000>;
 		};
 		pin@8 { /* OUT4P & OUT4N LVDS */
@@ -478,6 +492,7 @@
 			reg = <8>;
 
 			label = "CLK125M2 OUT";
+			type = "gnss";
 			supported-frequencies = /bits/ 64 <125000000>;
 		};
 		pin@12 { /* OUT6P & OUT6N LVDS */
@@ -485,6 +500,7 @@
 			reg = <12>;
 
 			label = "SyncE Local OUT";
+			type = "gnss";
 			supported-frequencies = /bits/ 64 <125000000>;
 		};
 		pin@14 { /* OUT7P & OUT7N LVDS */
@@ -492,6 +508,7 @@
 			reg = <14>;
 
 			label = "SyncE Diff M1 OUT";
+			type = "gnss";
 			supported-frequencies = /bits/ 64 <125000000>;
 		};
 		pin@16 { /* OUT8P & OUT8N LVDS */
@@ -499,6 +516,7 @@
 			reg = <16>;
 
 			label = "SyncE Diff M2 OUT";
+			type = "gnss";
 			supported-frequencies = /bits/ 64 <125000000>;
 		};
 		pin@18 { /* OUT9P */
@@ -506,6 +524,7 @@
 			reg = <18>;
 
 			label = "SyncE M1 OUT";
+			type = "gnss";
 			supported-frequencies = /bits/ 64 <125000000>;
 		};
 		pin@19 { /* OUT9N */
@@ -513,6 +532,7 @@
 			reg = <19>;
 
 			label = "SyncE M2 OUT";
+			type = "gnss";
 			supported-frequencies = /bits/ 64 <125000000>;
 		};
 	};
