@@ -1889,7 +1889,7 @@ zl3073x_dpll_fill_pin_properties_from_fw(struct zl3073x_dpll_pin *pin)
 	fwnode_property_read_string(node, "label", &props->board_label);
 
 	/* Read supported frequencies property if they are specified */
-	len = fwnode_property_count_u64(node, "freqs-hz");
+	len = fwnode_property_count_u64(node, "supported-frequencies");
 	if (len > 0) {
 		u64 *freqs;
 		int i;
@@ -1898,7 +1898,8 @@ zl3073x_dpll_fill_pin_properties_from_fw(struct zl3073x_dpll_pin *pin)
 		if (!freqs)
 			goto finish;
 
-		fwnode_property_read_u64_array(node, "freqs-hz", freqs, len);
+		fwnode_property_read_u64_array(node, "supported-frequencies",
+					       freqs, len);
 
 		props->freq_supported = devm_kcalloc(zldpll->mfd->dev, len,
 						     sizeof(u64), GFP_KERNEL);
@@ -2222,9 +2223,9 @@ zl3073x_dpll_type_get(struct zl3073x_dpll *zldpll)
 	type = DPLL_TYPE_PPS;
 
 	/* Read dpll types property from firmware */
-	rc = device_property_read_string_array(zldpll->mfd->dev,
-					       "microchip,dpll-types", types,
-					       ARRAY_SIZE(types));
+	rc = device_property_read_string_array(zldpll->mfd->dev, "dpll-types",
+					       types, ARRAY_SIZE(types));
+
 	/* It is not present or property does not exist, use default */
 	if (rc <= zldpll->id)
 		return type;
