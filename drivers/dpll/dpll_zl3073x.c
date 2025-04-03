@@ -1935,6 +1935,7 @@ zl3073x_dpll_pin_info_get(struct zl3073x_dpll_pin *pin)
 	struct zl3073x_dev *zldev = pin_to_dev(pin);
 	struct zl3073x_dpll_pin_info *pin_info;
 	struct dpll_pin_frequency *ranges;
+	const char *pin_type;
 	int i, num_freqs;
 	u64 *freqs;
 
@@ -1967,6 +1968,24 @@ zl3073x_dpll_pin_info_get(struct zl3073x_dpll_pin *pin)
 	/* Look for label property and store the value as board label */
 	fwnode_property_read_string(pin_info->fwnode, "label",
 				    &pin_info->props.board_label);
+
+	/* Loon for pin type property and translate its value to DPLL
+	 * pin type enum if it is present.
+	 */
+	if (!fwnode_property_read_string(pin_info->fwnode, "type", &pin_type)) {
+		if (!strcmp(pin_type, "ext"))
+			pin_info->props.type = DPLL_PIN_TYPE_EXT;
+		else if (!strcmp(pin_type, "gnss"))
+			pin_info->props.type = DPLL_PIN_TYPE_GNSS;
+		else if (!strcmp(pin_type, "int"))
+			pin_info->props.type = DPLL_PIN_TYPE_INT_OSCILLATOR;
+		else if (!strcmp(pin_type, "synce"))
+			pin_info->props.type = DPLL_PIN_TYPE_SYNCE_ETH_PORT;
+		else
+			dev_warn(zldev->dev,
+				 "Unknown or unsupported pin type '%s'\n",
+				 pin_type);
+	}
 
 	/* Check if the pin supports embedded sync control */
 	pin->esync_control = fwnode_property_read_bool(pin_info->fwnode,
