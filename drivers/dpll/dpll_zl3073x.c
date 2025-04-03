@@ -137,6 +137,18 @@ ZL3073X_REG32_DEF(output_phase_compensation,	0x720);
 #define ZL3073X_REF_IS_VALID(_ref)		((_ref) < ZL3073X_REF_INVALID)
 
 /**
+ * struct zl3073x_dpll_pin_info - DPLL pin info
+ * @props: DPLL core pin properties
+ * @package_label: pin package label
+ * @frequencies: flex array with supported frequencies
+ */
+struct zl3073x_dpll_pin_info {
+	struct dpll_pin_properties	props;
+	char				package_label[8];
+	struct fwnode_handle		*fwnode;
+};
+
+/**
  * struct zl3073x_dpll_pin - DPLL pin
  * dpll_pin: pointer to registered dpll_pin
  * props: pin properties
@@ -144,11 +156,9 @@ ZL3073X_REG32_DEF(output_phase_compensation,	0x720);
  */
 struct zl3073x_dpll_pin {
 	struct dpll_pin			*dpll_pin;
-	struct dpll_pin_properties	props;
 	u8				index;
 	bool				esync_control;
 	enum dpll_pin_state		pin_state;
-	char				package_label[8];
 	s64				phase_offset;
 	s64				freq_offset;
 	u8				prio;
@@ -1849,92 +1859,36 @@ zl3073x_dpll_pin_fwnode_get(struct zl3073x_dpll_pin *pin)
 	/* Release pin parent node */
 	fwnode_handle_put(pins_node);
 
-	if (pin_node)
-		dev_dbg(zldpll->mfd->dev, "Firmware node for %s%u%c %sfound\n",
-			zl3073x_dpll_is_input_pin(pin) ? "REF" : "OUT", idx / 2,
-			zl3073x_dpll_is_p_pin(pin) ? 'P' : 'N',
-			pin_node ? "" : "NOT ");
+	dev_dbg(zldpll->mfd->dev, "Firmware node for %s%u%c %sfound\n",
+		zl3073x_dpll_is_input_pin(pin) ? "REF" : "OUT", idx / 2,
+		zl3073x_dpll_is_p_pin(pin) ? 'P' : 'N',
+		pin_node ? "" : "NOT ");
 
 	return pin_node;
 }
 
-/**
- * zl3073x_dpll_fill_pin_properties_from_fw - fill properties from firmware node
- * @pin: Pin whose properties are filled
- *
- * Gets firmware node for the given pin, enumerate its properties and use their
- * values to initialize given pin properties.
- */
 static void
-zl3073x_dpll_fill_pin_properties_from_fw(struct zl3073x_dpll_pin *pin)
+zl3073x_dpll_pin_info_package_label_set(struct zl3073x_dpll_pin *pin,
+					struct zl3073x_dpll_pin_info *pin_info)
 {
-	struct dpll_pin_properties *props = &pin->props;
-	struct zl3073x_dpll *zldpll = pin_to_dpll(pin);
-	struct fwnode_handle *node;
-	int len;
-
-	/* Get firmware node for the given pin */
-	node = zl3073x_dpll_pin_fwnode_get(pin);
-	if (!node)
-		return;
-
-	/* Look for label property and store the value as board label */
-	fwnode_property_read_string(node, "label", &props->board_label);
-
-	/* Read supported frequencies property if they are specified */
-	len = fwnode_property_count_u64(node, "supported-frequencies");
-	if (len > 0) {
-		u64 *freqs;
-		int i;
-
-		freqs = kcalloc(len, sizeof(u64), GFP_KERNEL);
-		if (!freqs)
-			goto finish;
-
-		fwnode_property_read_u64_array(node, "supported-frequencies",
-					       freqs, len);
-
-		props->freq_supported = devm_kcalloc(zldpll->mfd->dev, len,
-						     sizeof(struct dpll_pin_frequency),
-						     GFP_KERNEL);
-		if (!props->freq_supported) {
-			kfree(freqs);
-			goto finish;
-		}
-		props->freq_supported_num = len;
-
-		for (i = 0; i < len; i++) {
-			struct dpll_pin_frequency freq =
-				DPLL_PIN_FREQUENCY(freqs[i]);
-
-			props->freq_supported[i] = freq;
-		}
-
-		kfree(freqs);
-	}
-
-	/* Check if the pin supports embedded sync control */
-	pin->esync_control = fwnode_property_read_bool(node, "esync-control");
-
-finish:
-	/* Release firmware node */
-	fwnode_handle_put(node);
-}
-
-static void
-zl3073x_dpll_fill_pin_package_label(struct zl3073x_dpll_pin *pin)
-{
-	char suffix = zl3073x_dpll_is_p_pin(pin) ? 'P' : 'N';
 	struct zl3073x_dev *zldev = pin_to_dpll(pin)->mfd;
+	char suffix;
 	u8 idx;
+
+	suffix = zl3073x_dpll_is_p_pin(pin) ? 'P' : 'N';
 
 	if (zl3073x_dpll_is_input_pin(pin)) {
 		idx = zl3073x_dpll_pin_index_get(pin);
+
 		if (zl3073x_input_is_diff(zldev, idx))
-			snprintf(pin->package_label, sizeof(pin->package_label),
+			/* For differential use REF<n> */
+			snprintf(pin_info->package_label,
+				 sizeof(pin_info->package_label),
 				 "REF%u", idx / 2);
 		else
-			snprintf(pin->package_label, sizeof(pin->package_label),
+			/* For single-ended use REF<n>P/N */
+			snprintf(pin_info->package_label,
+				 sizeof(pin_info->package_label),
 				 "REF%u%c", idx / 2, suffix);
 	} else {
 		idx = zl3073x_dpll_output_pin_output_get(pin);
@@ -1943,60 +1897,168 @@ zl3073x_dpll_fill_pin_package_label(struct zl3073x_dpll_pin *pin)
 		case OUTPUT_MODE_SIGNAL_FORMAT_LVDS:
 		case OUTPUT_MODE_SIGNAL_FORMAT_DIFFERENTIAL:
 		case OUTPUT_MODE_SIGNAL_FORMAT_LOWVCM:
-			/* Differential formats */
-			snprintf(pin->package_label, sizeof(pin->package_label),
-				 "OUT%u", idx);
+			/* For differential use OUT<n> */
+			snprintf(pin_info->package_label,
+				 sizeof(pin_info->package_label), "OUT%u", idx);
 			break;
 		default:
-			snprintf(pin->package_label, sizeof(pin->package_label),
-				 "OUT%u%c", idx, suffix);
+			/* For single-ended use OUT<n>P/N */
+			snprintf(pin_info->package_label,
+				 sizeof(pin_info->package_label), "OUT%u%c",
+				 idx, suffix);
 			break;
 		}
 	}
 
-	pin->props.package_label = pin->package_label;
+	/* Set package_label pointer in DPLL core properties to generated
+	 * string.
+	 */
+	pin_info->props.package_label = pin_info->package_label;
 }
 
-static void
-zl3073x_dpll_fill_pin_properties(struct zl3073x_dpll_pin *pin)
+/**
+ * zl3073x_dpll_pin_info_get - get pin info
+ * @pin: pin whose info is returned
+ *
+ * The function looks for firmware node for the given pin if it is provided
+ * by the system firmware (DT or ACPI), allocates pin info structure,
+ * generates package label string according pin type and its order number
+ * and optionally fetches board label and supported frequencies from
+ * the firmware node if it exists.
+ *
+ * Returns pointer to allocated pin info structure that has to be freed
+ * by @zl3073x_dpll_pin_info_put by the caller.
+ */
+static struct zl3073x_dpll_pin_info *
+zl3073x_dpll_pin_info_get(struct zl3073x_dpll_pin *pin)
 {
-	struct dpll_pin_properties *props = &pin->props;
+	struct zl3073x_dev *zldev = pin_to_dev(pin);
+	struct zl3073x_dpll_pin_info *pin_info;
+	struct dpll_pin_frequency *ranges;
+	int i, num_freqs;
+	u64 *freqs;
 
-	memset(props, 0, sizeof(*props));
+	/* Allocate pin info structure */
+	pin_info = kzalloc(sizeof(*pin_info), GFP_KERNEL);
+	if (!pin_info)
+		return NULL;
 
+	/* Set default pin type and capabilities */
 	if (zl3073x_dpll_is_input_pin(pin)) {
-		props->type = DPLL_PIN_TYPE_EXT;
-		props->capabilities =
+		pin_info->props.type = DPLL_PIN_TYPE_EXT;
+		pin_info->props.capabilities =
 			DPLL_PIN_CAPABILITIES_PRIORITY_CAN_CHANGE |
 			DPLL_PIN_CAPABILITIES_STATE_CAN_CHANGE;
 	} else {
-		props->type = DPLL_PIN_TYPE_GNSS;
+		pin_info->props.type = DPLL_PIN_TYPE_GNSS;
+	}
+	pin_info->props.phase_range.min = S32_MIN;
+	pin_info->props.phase_range.max = S32_MAX;
+
+	/* Generate package label for the given pin */
+	zl3073x_dpll_pin_info_package_label_set(pin, pin_info);
+
+	/* Get firmware node for the given pin */
+	pin_info->fwnode = zl3073x_dpll_pin_fwnode_get(pin);
+	if (!pin_info->fwnode)
+		/* Return if it does not exist */
+		return pin_info;
+
+	/* Look for label property and store the value as board label */
+	fwnode_property_read_string(pin_info->fwnode, "label",
+				    &pin_info->props.board_label);
+
+	/* Check if the pin supports embedded sync control */
+	pin->esync_control = fwnode_property_read_bool(pin_info->fwnode,
+						       "esync-control");
+
+	/* Read number of supported frequencies if they are provided */
+	num_freqs = fwnode_property_count_u64(pin_info->fwnode,
+					      "supported-frequencies");
+	if (num_freqs <= 0)
+		/* Return if the property does not exist or number is 0 */
+		return pin_info;
+
+	/* The firmware node specifies list of supported frequencies while
+	 * DPLL core pin properties requires list of frequency ranges.
+	 * So read the frequency list into temporary array.
+	 */
+	freqs = kcalloc(num_freqs, sizeof(*freqs), GFP_KERNEL);
+	if (!freqs)
+		goto err_freqs;
+
+	fwnode_property_read_u64_array(pin_info->fwnode,
+				       "supported-frequencies", freqs,
+				       num_freqs);
+
+	/* Allocate frequency ranges list and fill it */
+	ranges = kcalloc(num_freqs, sizeof(*ranges), GFP_KERNEL);
+	if (!ranges)
+		goto err_ranges;
+
+	for (i = 0; i < num_freqs; i++) {
+		struct dpll_pin_frequency freq = DPLL_PIN_FREQUENCY(freqs[i]);
+
+		ranges[i] = freq;
 	}
 
-	zl3073x_dpll_fill_pin_package_label(pin);
+	pin_info->props.freq_supported = ranges;
+	pin_info->props.freq_supported_num = num_freqs;
 
-	pin->props.phase_range.min = S32_MIN;
-	pin->props.phase_range.max = S32_MAX;
+	/* Free temporary array */
+	kfree(freqs);
 
-	/* Fill properties from corresponding firmware node if it is present */
-	zl3073x_dpll_fill_pin_properties_from_fw(pin);
+	return pin_info;
+
+err_ranges:
+	kfree(freqs);
+err_freqs:
+	fwnode_handle_put(pin_info->fwnode);
+	kfree(pin_info);
+
+	return NULL;
+}
+
+/**
+ * zl3073x_dpll_pin_info_put - free pin info
+ * @pin_info: pin info to free
+ *
+ * The function deallocates given pin info structure, associated frequency
+ * ranges list and firmware node handle.
+ */
+static void
+zl3073x_dpll_pin_info_put(struct zl3073x_dpll_pin_info *pin_info)
+{
+	/* Free supported frequency ranges list if it is present */
+	if (pin_info->props.freq_supported)
+		kfree(pin_info->props.freq_supported);
+
+	/* Put firmware handle if it is present */
+	if (pin_info->fwnode)
+		fwnode_handle_put(pin_info->fwnode);
+
+	/* Free the pin info structure itself */
+	kfree(pin_info);
 }
 
 static int
 zl3073x_dpll_pin_register(struct zl3073x_dpll_pin *pin)
 {
 	struct zl3073x_dpll *zldpll = pin_to_dpll(pin);
+	struct zl3073x_dpll_pin_info *pin_info;
 	const struct dpll_pin_ops *ops;
 	int rc;
 
-	/* Fill pin properties */
-	zl3073x_dpll_fill_pin_properties(pin);
+	/* Get pin info */
+	pin_info = zl3073x_dpll_pin_info_get(pin);
 
-	/* Create DPLL pin */
+	/* Create or get existing DPLL pin */
 	pin->dpll_pin = dpll_pin_get(zldpll->mfd->clock_id, pin->index,
-				     THIS_MODULE, &pin->props);
-	if (IS_ERR(pin->dpll_pin))
-		return PTR_ERR(pin->dpll_pin);
+				     THIS_MODULE, &pin_info->props);
+	if (IS_ERR(pin->dpll_pin)) {
+		rc = PTR_ERR(pin->dpll_pin);
+		goto err_pin_get;
+	}
 
 	if (zl3073x_dpll_is_input_pin(pin))
 		ops = &zl3073x_dpll_input_pin_ops;
@@ -2008,11 +2070,16 @@ zl3073x_dpll_pin_register(struct zl3073x_dpll_pin *pin)
 	if (rc)
 		goto err_register;
 
+	/* Free pin info */
+	zl3073x_dpll_pin_info_put(pin_info);
+
 	return 0;
 
 err_register:
 	dpll_pin_put(pin->dpll_pin);
 	pin->dpll_pin = NULL;
+err_pin_get:
+	zl3073x_dpll_pin_info_put(pin_info);
 
 	return rc;
 }
