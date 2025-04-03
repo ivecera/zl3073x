@@ -1468,28 +1468,16 @@ zl3073x_dpll_output_pin_frequency_set(const struct dpll_pin *dpll_pin,
 	struct zl3073x_dpll *zldpll = dpll_priv;
 	struct zl3073x_dev *zldev = zldpll->mfd;
 	struct zl3073x_dpll_pin *pin = pin_priv;
-	u32 i, output_div, output_p_freq;
+	u32 output_div, output_p_freq;
 	u8 output, signal_format, synth;
 	u64 synth_freq;
 	int rc;
-
-	/* Do not allow to set frequency on internal oscilator pin type */
-	if (pin->props.type == DPLL_PIN_TYPE_INT_OSCILLATOR)
-		return -EINVAL;
 
 	guard(zl3073x)(zldev);
 
 	output = zl3073x_dpll_output_pin_output_get(pin);
 	synth = zl3073x_dpll_pin_synth_get(pin);
 	synth_freq = zl3073x_synth_freq_get(zldev, synth);
-
-	for (i = 0; i < pin->props.freq_supported_num; i++)
-		if (pin->props.freq_supported[i].min <= frequency &&
-		    pin->props.freq_supported[i].max >= frequency)
-			break;
-
-	if (i == pin->props.freq_supported_num)
-		return -EINVAL;
 
 	/* Read output configuration into mailbox */
 	rc = zl3073x_mb_output_read(zldev, output);
