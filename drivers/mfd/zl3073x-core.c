@@ -807,3 +807,4 @@ EXPORT_SYMBOL_GPL(zl3073x_dev_exit);
 MODULE_AUTHOR("Ivan Vecera <ivecera@redhat.com>");
 MODULE_DESCRIPTION("Microchip ZL3073x core driver");
 MODULE_LICENSE("GPL");
+MODULE_FIRMWARE("microchip/zl3073x.mfg");
