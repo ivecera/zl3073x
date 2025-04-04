@@ -2537,7 +2537,7 @@ zl3073x_dpll_init_worker(struct zl3073x_dpll *zldpll)
 	struct kthread_worker *kworker;
 
 	kthread_init_delayed_work(&zldpll->work, zl3073x_dpll_periodic_work);
-	kworker = kthread_create_worker(0, "zl3073x-%s", dev_name(zldpll->dev));
+	kworker = kthread_run_worker(0, "zl3073x-%s", dev_name(zldpll->dev));
 	if (IS_ERR(kworker))
 		return PTR_ERR(kworker);
 
