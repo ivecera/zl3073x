@@ -654,6 +654,14 @@ static int zl3073x_synth_state_fetch(struct zl3073x_dev *zldev, u8 index)
 	if (rc)
 		return rc;
 
+	/* Check denominator for zero to avoid div by 0 */
+	if (!denominator) {
+		dev_err(zldev->dev,
+			"Zero divisor for synth %u retrieved from device\n",
+			index);
+		return -ENODEV;
+	}
+
 	/* Compute and store synth frequency */
 	zldev->synth[index].freq = mul_u64_u32_div(mul_u32_u32(base, mult),
 						   numerator, denominator);
