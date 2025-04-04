@@ -740,7 +740,7 @@ int zl3073x_dev_init(struct zl3073x_dev *zldev, u8 dev_id)
 	}
 
 	/* Use chip ID and given dev ID as clock ID */
-	zldev->clock_id = (id << 8) | dev_id;
+	zldev->clock_id = ((u64)id << 8) | dev_id;
 
 	/* Load mfg file if present */
 	zl3073x_fw_load(zldev);
