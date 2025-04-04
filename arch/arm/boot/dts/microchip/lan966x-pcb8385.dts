@@ -1,0 +1,671 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * lan966x-pcb8385.dts - Device Tree file for LAN966X-PCB8385 board
+ *
+ * Copyright (C) 2022 Microchip Technology Inc. and its subsidiaries
+ *
+ * Author: Horatiu Vultur <horatiu.vultur@microchip.com>
+ * Author: Jerry Ray <jerry.ray@microchip.com>
+ */
+/dts-v1/;
+
+#include "lan966x.dtsi"
+#include "dt-bindings/phy/phy-lan966x-serdes.h"
+
+/ {
+	model = "Microchip EDS - LAN9668";
+	compatible = "microchip,lan9668-pcb8385", "microchip,lan9668", "microchip,lan966";
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+
+	aliases {
+		serial0 = &usart3;
+		serial1 = &usart2;
+	};
+
+	leds {
+		compatible = "gpio-leds";
+
+		led-p1-green {
+			label = "cu0:green";
+			gpios = <&sgpio_out 2 0 GPIO_ACTIVE_LOW>;
+			default-state = "off";
+			linux,default-trigger = "e200413c.mdio-mii:01:link";
+		};
+
+		led-p1-yellow {
+			label = "cu0:yellow";
+			gpios = <&sgpio_out 2 1 GPIO_ACTIVE_LOW>;
+			default-state = "off";
+		};
+
+		led-p2-green {
+			label = "cu1:green";
+			gpios = <&sgpio_out 3 0 GPIO_ACTIVE_LOW>;
+			default-state = "off";
+			linux,default-trigger = "e200413c.mdio-mii:02:link";
+		};
+
+		led-p2-yellow {
+			label = "cu1:yellow";
+			gpios = <&sgpio_out 3 1 GPIO_ACTIVE_LOW>;
+			default-state = "off";
+		};
+	};
+
+	gpio-restart {
+		compatible = "gpio-restart";
+		gpios = <&gpio 59 GPIO_ACTIVE_LOW>;
+		open-source;
+		priority = <200>;
+	};
+};
+
+&aes {
+	status = "disabled"; /* Reserved by secure OS */
+};
+
+&gpio {
+	emmc_sd_pins: emmc-sd-pins {
+		/* eMMC_SD - CMD, CLK, D0, D1, D2, D3, RSTN */
+		pins = "GPIO_67", "GPIO_68", "GPIO_69", "GPIO_70",
+			"GPIO_71", "GPIO_72", "GPIO_77";
+		function = "emmc_sd";
+	};
+
+	emmc_pins: emmc-pins {
+		/* eMMC - D4, D5, D6, D7 */
+		pins = "GPIO_73", "GPIO_74", "GPIO_75", "GPIO_76";
+		function = "emmc";
+	};
+
+	fc0_b_pins: fc0-b-pins {
+		/* SCL, SDA */
+		pins = "GPIO_25", "GPIO_26";
+		function = "fc0_b";
+	};
+
+	fc1_c_pins: fc1-c-pins {
+		/* SCL, SDA */
+		pins = "GPIO_47", "GPIO_48";
+		function = "fc1_c";
+	};
+
+	fc2_b_pins: fc2-b-pins {
+		/* RX, TX */
+		pins = "GPIO_44", "GPIO_45";
+		function = "fc2_b";
+	};
+
+	fc3_b_pins: fc3-b-pins {
+		/* RX, TX */
+		pins = "GPIO_52", "GPIO_53";
+		function = "fc3_b";
+	};
+
+	fc4_b_pins: fc4-b-pins {
+		/* SCK, MISO, MOSI */
+		pins = "GPIO_56", "GPIO_57", "GPIO_58";
+		function = "fc4_b";
+	};
+
+	fc_shrd13_pins: fc-shrd13-pins {
+		pins = "GPIO_62";
+		function = "fc_shrd13";
+	};
+
+	miim_a_pins: mdio-pins {
+		/* MDC, MDIO */
+		pins =  "GPIO_28", "GPIO_29";
+		function = "miim_a";
+	};
+
+	sgpio_a_pins: sgpio-a-pins {
+		/* SCK, D0, D1, LD */
+		pins = "GPIO_32", "GPIO_33", "GPIO_34", "GPIO_35";
+		function = "sgpio_a";
+	};
+
+	usb_host_a_pins: usb_host_a_pins {
+		pins = "GPIO_65", "GPIO_66";
+		function = "usb_host_a";
+	};
+};
+
+&flx0 {
+	atmel,flexcom-mode = <ATMEL_FLEXCOM_MODE_TWI>;
+	status = "okay";
+
+	i2c0: i2c@600 {
+		pinctrl-0 = <&fc0_b_pins>;
+		pinctrl-names = "default";
+		dmas = <0>, <0>;
+		i2c-analog-filter;
+		i2c-digital-filter;
+		i2c-digital-filter-width-ns = <35>;
+		i2c-sda-hold-time-ns = <1500>;
+		status = "okay";
+	};
+};
+
+&flx1 {
+	atmel,flexcom-mode = <ATMEL_FLEXCOM_MODE_TWI>;
+	status = "okay";
+
+	i2c1: i2c@600 {
+		pinctrl-0 = <&fc1_c_pins>;
+		pinctrl-names = "default";
+		dmas = <0>, <0>;
+		i2c-analog-filter;
+		i2c-digital-filter;
+		i2c-digital-filter-width-ns = <35>;
+		i2c-sda-hold-time-ns = <1500>;
+		status = "okay";
+
+		dpll0: dpll@70 {
+			compatible = "microchip,zl30732";
+			reg = <0x70>;
+			#address-cells = <0>;
+			#size-cells = <0>;
+			status = "okay";
+
+			dpll-types = "eec", "pps";
+		};
+	};
+};
+
+&flx2 {
+	atmel,flexcom-mode = <ATMEL_FLEXCOM_MODE_USART>;
+	status = "okay";
+
+	usart2: serial@200 {
+		pinctrl-0 = <&fc2_b_pins>;
+		pinctrl-names = "default";
+		status = "okay";
+	};
+};
+
+&flx3 {
+	atmel,flexcom-mode = <ATMEL_FLEXCOM_MODE_USART>;
+	status = "okay";
+
+	usart3: serial@200 {
+		pinctrl-0 = <&fc3_b_pins>;
+		pinctrl-names = "default";
+		status = "okay";
+	};
+};
+
+&flx4 {
+	atmel,flexcom-mode = <ATMEL_FLEXCOM_MODE_SPI>;
+	status = "okay";
+
+	spi4: spi@400 {
+		clock-names = "spi_clk";
+		pinctrl-0 = <&fc4_b_pins>, <&fc_shrd13_pins>;
+		pinctrl-names = "default";
+		cs-gpios = <&gpio 62 GPIO_ACTIVE_LOW>;
+		dmas = <0>, <0>;
+		status = "okay";
+	};
+};
+
+&i2c0 {
+	eeprom@54 {
+		compatible = "atmel,24c01";
+		reg = <0x54>;
+		status = "okay";
+	};
+
+	eeprom@55 {
+		compatible = "atmel,24c01";
+		reg = <0x55>;
+		status = "okay";
+	};
+
+	/* UCS2113 at 0x57 */
+};
+
+&mdio0 {
+	pinctrl-0 = <&miim_a_pins>;
+	pinctrl-names = "default";
+	status = "okay";
+
+	phy2: ethernet-phy@7 {
+		reg = <7>;
+		interrupts = <24 IRQ_TYPE_LEVEL_LOW>;
+		interrupt-parent = <&gpio>;
+		microchip,1588-clock-freq = <125000000>;
+	};
+	phy3: ethernet-phy@8 {
+		reg = <8>;
+		interrupts = <24 IRQ_TYPE_LEVEL_LOW>;
+		interrupt-parent = <&gpio>;
+		microchip,1588-clock-freq = <125000000>;
+	};
+	phy4: ethernet-phy@9 {
+		reg = <9>;
+		interrupts = <24 IRQ_TYPE_LEVEL_LOW>;
+		interrupt-parent = <&gpio>;
+		microchip,1588-clock-freq = <125000000>;
+	};
+	phy5: ethernet-phy@10 {
+		reg = <10>;
+		interrupts = <24 IRQ_TYPE_LEVEL_LOW>;
+		interrupt-parent = <&gpio>;
+		microchip,1588-clock-freq = <125000000>;
+	};
+	phy6: ethernet-phy@3 {
+		reg = <3>;
+		interrupts = <24 IRQ_TYPE_LEVEL_LOW>;
+		interrupt-parent = <&gpio>;
+	};
+};
+
+&port0 {
+	reg = <2>;
+	status = "okay";
+	phy-handle = <&phy4>;
+	phy-mode = "qsgmii";
+	phys = <&serdes 0 SERDES6G(1)>;
+};
+
+&port1 {
+	reg = <3>;
+	status = "okay";
+	phy-handle = <&phy5>;
+	phy-mode = "qsgmii";
+	phys = <&serdes 1 SERDES6G(1)>;
+};
+
+&port2 {
+	reg = <0>;
+	status = "okay";
+	phy-handle = <&phy2>;
+	phy-mode = "qsgmii";
+	phys = <&serdes 3 SERDES6G(1)>;
+};
+
+&port3 {
+	reg = <1>;
+	status = "okay";
+	phy-handle = <&phy3>;
+	phy-mode = "qsgmii";
+	phys = <&serdes 3 SERDES6G(1)>;
+};
+
+&port6 {
+	reg = <6>;
+	status = "okay";
+	phy-handle = <&phy6>;
+	phy-mode = "rgmii-id";
+	phys = <&serdes 6 RGMII(1)>;
+};
+
+&sdmmc0 {
+	bus-width = <8>;
+	cap-mmc-highspeed;
+	cap-mmc-hw-reset;
+	non-removable;
+	pinctrl-0 = <&emmc_sd_pins>, <&emmc_pins>;
+	pinctrl-names = "default";
+	no-1-8-v;
+	tx-phase = <0>; /* 180 degrees phase shift */
+	status = "okay";
+};
+
+&serdes {
+	status = "okay";
+	microchip,s1-tx-inverted;
+};
+
+&sgpio {
+	pinctrl-0 = <&sgpio_a_pins>;
+	pinctrl-names = "default";
+	microchip,sgpio-port-ranges = <0 3>;
+	status = "okay";
+
+	gpio@0 {
+		ngpios = <64>;
+	};
+	gpio@1 {
+		ngpios = <64>;
+	};
+};
+
+&spi4 {
+	spidev: spidev@0 {
+		compatible = "linux,spidev";
+		reg = <0>;
+		spi-max-frequency = <2000000>;
+		status = "okay";
+	};
+};
+
+&switch {
+	status = "okay";
+};
+
+&usb {
+	dr_mode = "host";
+	pinctrl-0 = <&usb_host_a_pins>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&dpll0 {
+	input-pins {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		pin@0 { /* REF0P */
+			reg = <0>;
+
+			connection-type = "ext";
+			esync-control;
+			label = "SyncE IN M1 CLK1";
+			supported-frequencies-hz = /bits/ 64 <1
+							   25
+							   100
+							   1000
+							   10000000
+							   25000000
+							   62500000
+							   78125000
+							   100000000>;
+		};
+		pin@1 { /* REF0N */
+			reg = <1>;
+
+			connection-type = "ext";
+			esync-control;
+			label = "SyncE IN M1 CLK2";
+			supported-frequencies-hz = /bits/ 64 <1
+							   25
+							   100
+							   1000
+							   10000000
+							   25000000
+							   62500000
+							   78125000
+							   100000000>;
+		};
+		pin@2 { /* REF1P */
+			reg = <2>;
+
+			connection-type = "ext";
+			esync-control;
+			label = "SyncE IN M2 CLK1";
+			supported-frequencies-hz = /bits/ 64 <1
+							   25
+							   100
+							   1000
+							   10000000
+							   25000000
+							   62500000
+							   78125000
+							   100000000
+							   125000000>;
+		};
+		pin@3 { /* REF1N */
+			reg = <3>;
+
+			connection-type = "ext";
+			esync-control;
+			label = "SyncE IN M2 CLK2";
+			supported-frequencies-hz = /bits/ 64 <1
+							   25
+							   100
+							   1000
+							   10000000
+							   25000000
+							   62500000
+							   78125000
+							   100000000>;
+		};
+		pin@4 { /* REF2P */
+			reg = <4>;
+
+			connection-type = "ext";
+			esync-control;
+			label = "Station CLK IN";
+			supported-frequencies-hz = /bits/ 64 <1
+							   25
+							   100
+							   1000
+							   10000000
+							   25000000
+							   62500000
+							   78125000
+							   100000000>;
+		};
+		pin@5 { /* REF2N */
+			reg = <5>;
+
+			connection-type = "ext";
+			esync-control;
+			label = "1PPS IN";
+			supported-frequencies-hz = /bits/ 64 <1
+							   25
+							   100
+							   1000
+							   10000000
+							   25000000
+							   62500000
+							   78125000
+							   100000000>;
+		};
+		pin@7 { /* REF3N */
+			reg = <7>;
+
+			connection-type = "ext";
+			esync-control;
+			label = "Feedb 1PPS IN";
+			supported-frequencies-hz = /bits/ 64 <1
+							   25
+							   100
+							   1000
+							   10000000
+							   25000000
+							   62500000
+							   78125000
+							   100000000>;
+		};
+		pin@8 { /* REF4P */
+			reg = <8>;
+
+			connection-type = "ext";
+			esync-control;
+			label = "Feedb 25M IN";
+			supported-frequencies-hz = /bits/ 64 <1
+							   25
+							   100
+							   1000
+							   10000000
+							   25000000
+							   62500000
+							   78125000
+							   100000000>;
+		};
+		pin@9 { /* REF4N */
+			reg = <9>;
+
+			connection-type = "ext";
+			esync-control;
+			label = "REF_TEST 10M";
+			supported-frequencies-hz = /bits/ 64 <1
+							   25
+							   100
+							   1000
+							   10000000
+							   25000000
+							   62500000
+							   78125000
+							   100000000>;
+		};
+	};
+
+	output-pins {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		pin@0 { /* OUT0P */
+			reg = <0>;
+
+			connection-type = "gnss";
+			esync-control;
+			label = "Feedb 25M OUT";
+			supported-frequencies-hz = /bits/ 64 <1
+							   25
+							   100
+							   1000
+							   10000000
+							   25000000>;
+		};
+		pin@1 { /* OUT0N */
+			reg = <1>;
+
+			connection-type = "gnss";
+			esync-control;
+			label = "1PPS OUT";
+			supported-frequencies-hz = /bits/ 64 <1
+							   25
+							   100
+							   1000
+							   10000000
+							   25000000>;
+		};
+		pin@2 { /* OUT1P */
+			reg = <2>;
+
+			connection-type = "gnss";
+			esync-control;
+			label = "1PPS M1 OUT";
+			supported-frequencies-hz = /bits/ 64 <1
+							   25
+							   100
+							   1000
+							   10000000
+							   25000000>;
+		};
+		pin@3 { /* OUT1N */
+			reg = <3>;
+
+			connection-type = "gnss";
+			esync-control;
+			label = "1PPS M2 OUT";
+			supported-frequencies-hz = /bits/ 64 <1
+							   25
+							   100
+							   1000
+							   10000000
+							   25000000>;
+		};
+		pin@4 { /* OUT2P */
+			reg = <4>;
+
+			connection-type = "gnss";
+			esync-control;
+			label = "Station CLK OUT";
+			supported-frequencies-hz = /bits/ 64 <1
+							   25
+							   100
+							   1000
+							   10000000
+							   25000000>;
+		};
+		pin@6 { /* OUT3P & OUT3N LVDS */
+			reg = <6>;
+
+			connection-type = "gnss";
+			esync-control;
+			label = "CLK125M1 OUT";
+			supported-frequencies-hz = /bits/ 64 <1
+							   25
+							   100
+							   1000
+							   10000000
+							   25000000>;
+		};
+		pin@8 { /* OUT4P & OUT4N LVDS */
+			reg = <8>;
+
+			connection-type = "gnss";
+			esync-control;
+			label = "CLK125M2 OUT";
+			supported-frequencies-hz = /bits/ 64 <1
+							   25
+							   100
+							   1000
+							   10000000
+							   25000000>;
+		};
+		pin@12 { /* OUT6P & OUT6N LVDS */
+			reg = <12>;
+
+			connection-type = "gnss";
+			esync-control;
+			label = "SyncE Local OUT";
+			supported-frequencies-hz = /bits/ 64 <1
+							   25
+							   100
+							   1000
+							   10000000
+							   25000000>;
+		};
+		pin@14 { /* OUT7P & OUT7N LVDS */
+			reg = <14>;
+
+			connection-type = "gnss";
+			esync-control;
+			label = "SyncE Diff M1 OUT";
+			supported-frequencies-hz = /bits/ 64 <1
+							   25
+							   100
+							   1000
+							   10000000
+							   25000000>;
+		};
+		pin@16 { /* OUT8P & OUT8N LVDS */
+			reg = <16>;
+
+			connection-type = "gnss";
+			esync-control;
+			label = "SyncE Diff M2 OUT";
+			supported-frequencies-hz = /bits/ 64 <1
+							   25
+							   100
+							   1000
+							   10000000
+							   25000000>;
+		};
+		pin@18 { /* OUT9P */
+			reg = <18>;
+
+			connection-type = "gnss";
+			esync-control;
+			label = "SyncE M1 OUT";
+			supported-frequencies-hz = /bits/ 64 <1
+							   25
+							   100
+							   1000
+							   10000000
+							   25000000>;
+		};
+		pin@19 { /* OUT9N */
+			reg = <19>;
+
+			connection-type = "gnss";
+			esync-control;
+			label = "SyncE M2 OUT";
+			supported-frequencies-hz = /bits/ 64 <1
+							   25
+							   100
+							   1000
+							   10000000
+							   25000000>;
+		};
+	};
+};
