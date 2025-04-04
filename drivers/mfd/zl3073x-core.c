@@ -490,9 +490,10 @@ static int zl3073x_fw_parse_line(struct zl3073x_dev *zldev, const char *line)
 	return 0;
 }
 
+#define ZL3073X_MFG_FILE "microchip/zl3073x.mfg"
+
 static void zl3073x_fw_load(struct zl3073x_dev *zldev)
 {
-#define ZL3073X_MFG_FILE "zl3073x.mfg"
 	const struct firmware *fw;
 	const char *ptr, *end;
 	char buf[128];
@@ -815,4 +816,4 @@ EXPORT_SYMBOL_GPL(zl3073x_dev_exit);
 MODULE_AUTHOR("Ivan Vecera <ivecera@redhat.com>");
 MODULE_DESCRIPTION("Microchip ZL3073x core driver");
 MODULE_LICENSE("GPL");
-MODULE_FIRMWARE("microchip/zl3073x.mfg");
+MODULE_FIRMWARE(ZL3073X_MFG_FILE);
