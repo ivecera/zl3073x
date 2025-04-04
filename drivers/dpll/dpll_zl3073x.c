@@ -493,6 +493,14 @@ zl3073x_dpll_input_ref_frequency_get(struct zl3073x_dev *zldev, u8 ref_id,
 	if (rc)
 		return rc;
 
+	/* Check that the device returned non-zero denominator */
+	if (!denom) {
+		dev_err(zldev->dev,
+			"Zero divisor for ref %u retrieved from device\n",
+			ref_id);
+		return -EINVAL;
+	}
+
 	*frequency = mul_u64_u32_div(base_freq * mult, num, denom);
 
 	return rc;
@@ -815,8 +823,7 @@ zl3073x_dpll_input_pin_phase_offset_get(const struct dpll_pin *dpll_pin,
 		return rc;
 
 	/* Perform sign extension for 48bit signed value */
-	if (ref_phase & BIT_ULL(47))
-		ref_phase |= GENMASK_ULL(63, 48);
+	ref_phase = sign_extend64(ref_phase, 47);
 
 	/* Register units are 0.01 ps -> convert it to ps */
 	ref_phase = div_s64(ref_phase, 100);
@@ -897,8 +904,7 @@ zl3073x_dpll_input_pin_phase_adjust_get(const struct dpll_pin *dpll_pin,
 		return rc;
 
 	/* Perform sign extension for 48bit signed value */
-	if (phase_comp & BIT_ULL(47))
-		phase_comp |= GENMASK_ULL(63, 48);
+	phase_comp = sign_extend64(phase_comp, 47);
 
 	/* Reverse two's complement negation applied during set and convert
 	 * to 32bit signed int
