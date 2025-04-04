@@ -852,6 +852,14 @@ zl3073x_dpll_input_pin_phase_offset_get(const struct dpll_pin *dpll_pin,
 		if (rc)
 			return rc;
 
+		/* Check output divisor for zero */
+		if (!conn_ref) {
+			dev_err(zldev->dev,
+				"Zero frequency for ref %u got from device\n",
+				conn_ref);
+			return -EINVAL;
+		}
+
 		/* Get frequency of given ref */
 		rc = zl3073x_dpll_input_ref_frequency_get(zldev, ref_id,
 							  &ref_freq);
@@ -1273,11 +1281,26 @@ zl3073x_dpll_output_pin_esync_get(const struct dpll_pin *dpll_pin,
 	if (rc)
 		return rc;
 
+	/* Check output divisor for zero */
+	if (!output_div) {
+		dev_err(zldev->dev,
+			"Zero divisor for output %u got from device\n",
+			output);
+		return -EINVAL;
+	}
+
 	/* Read esync period */
 	rc = zl3073x_read_output_esync_period(zldev, &esync_period);
 	if (rc)
 		return rc;
 
+	/* Check esync divisor for zero */
+	if (!esync_period) {
+		dev_err(zldev->dev,
+			"Zero esync divisor for output %u got from device\n",
+			output);
+		return -EINVAL;
+	}
 	/* Get synth attached to output pin */
 	synth = zl3073x_dpll_pin_synth_get(pin);
 
@@ -1370,6 +1393,14 @@ zl3073x_dpll_output_pin_esync_set(const struct dpll_pin *dpll_pin,
 	if (rc)
 		return rc;
 
+	/* Check output divisor for zero */
+	if (!output_div) {
+		dev_err(zldev->dev,
+			"Zero divisor for output %u got from device\n",
+			output);
+		return -EINVAL;
+	}
+
 	/* Get synth attached to output pin */
 	synth = zl3073x_dpll_pin_synth_get(pin);
 
@@ -1431,6 +1462,14 @@ zl3073x_dpll_output_pin_frequency_get(const struct dpll_pin *dpll_pin,
 	if (rc)
 		return rc;
 
+	/* Check output divisor for zero */
+	if (!output_div) {
+		dev_err(zldev->dev,
+			"Zero divisor for output %u got from device\n",
+			output);
+		return -EINVAL;
+	}
+
 	/* Read used signal format for the given output */
 	signal_format = zl3073x_output_signal_format_get(zldev, output);
 
@@ -1457,6 +1496,14 @@ zl3073x_dpll_output_pin_frequency_get(const struct dpll_pin *dpll_pin,
 			rc = zl3073x_read_output_esync_period(zldev, &period);
 			if (rc)
 				return rc;
+
+			/* Check N-pin divisor for zero */
+			if (!period) {
+				dev_err(zldev->dev,
+					"Zero N-pin divisor for output %u got from device\n",
+					output);
+				return -EINVAL;
+			}
 
 			/* Compute final divisor for N-pin */
 			divisor = mul_u32_u32(output_div, period);
@@ -1504,6 +1551,14 @@ zl3073x_dpll_output_pin_frequency_set(const struct dpll_pin *dpll_pin,
 	rc = zl3073x_read_output_div(zldev, &output_div);
 	if (rc)
 		return rc;
+
+	/* Check output divisor for zero */
+	if (!output_div) {
+		dev_err(zldev->dev,
+			"Zero divisor for output %u got from device\n",
+			output);
+		return -EINVAL;
+	}
 
 	/* Compute current output frequency for P-pin */
 	output_p_freq = (u32)div_u64(synth_freq, output_div);
