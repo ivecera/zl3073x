@@ -291,7 +291,7 @@ struct lan966x {
 	u32 num_stats;
 
 	/* workqueue for reading stats */
-	struct mutex stats_lock;
+	struct spinlock stats_lock;
 	u64 *stats;
 	struct delayed_work stats_work;
 	struct workqueue_struct *stats_queue;
