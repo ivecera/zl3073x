@@ -672,8 +672,8 @@ zl3073x_dpll_input_pin_phase_offset_get(const struct dpll_pin *dpll_pin,
 	/* Perform sign extension for 48bit signed value */
 	ref_phase = sign_extend64(pin->phase_offset, 47);
 
-	/* Register units are 0.01 ps -> convert it to ps */
-	ref_phase = div_s64(ref_phase, 100);
+	/* Register units are 0.01 ps -> convert it to fs */
+	ref_phase = ref_phase * 10;
 
 	/* Get currently connected reference */
 	rc = zl3073x_dpll_connected_ref_get(zldpll, &conn_ref);
@@ -706,12 +706,12 @@ zl3073x_dpll_input_pin_phase_offset_get(const struct dpll_pin *dpll_pin,
 			return rc;
 
 		if (conn_freq > ref_freq) {
-			s64 conn_period;
+			s64 conn_period_fs;
 			int div_factor;
 
-			conn_period = div_s64(PSEC_PER_SEC, conn_freq);
-			div_factor = div64_s64(ref_phase, conn_period);
-			ref_phase -= conn_period * div_factor;
+			conn_period_fs = div_s64(FSEC_PER_SEC, conn_freq);
+			div_factor = div64_s64(ref_phase, conn_period_fs);
+			ref_phase -= conn_period_fs * div_factor;
 		}
 	}
 
