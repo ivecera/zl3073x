@@ -2532,16 +2532,24 @@ zl3073x_dpll_periodic_work(struct kthread_work *work)
 		}
 
 		if (state != pin->pin_state) {
+			dev_dbg(dev, "INPUT%u state changed: %u->%u\n", index,
+				pin->pin_state, state);
 			pin->pin_state = state;
 			pin_changed = true;
 		}
 
 		if (ref_phase[index] != pin->phase_offset) {
+			dev_dbg(dev,
+				"INPUT%u phase offset changed: %lld->%lld\n",
+				index, sign_extend64(pin->phase_offset, 47),
+				sign_extend64(ref_phase[index], 47));
 			pin->phase_offset = ref_phase[index];
 			pin_changed = true;
 		}
 
 		if (ref_freq_offset[index] != pin->freq_offset) {
+			dev_dbg(dev, "INPUT%u freq offset changed: %u->%u\n",
+				index, pin->freq_offset, ref_freq_offset[index]);
 			pin->freq_offset = ref_freq_offset[index];
 			pin_changed = true;
 		}
