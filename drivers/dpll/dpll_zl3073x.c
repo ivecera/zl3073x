@@ -2483,6 +2483,10 @@ zl3073x_dpll_periodic_work(struct kthread_work *work)
 		dpll_device_change_ntf(zldpll->dpll_dev);
 	}
 
+	if (zldpll->refsel_mode != ZL_DPLL_MODE_REFSEL_MODE_AUTO &&
+	    zldpll->refsel_mode != ZL_DPLL_MODE_REFSEL_MODE_REFLOCK)
+		goto out;
+
 	/* Perform phase measurement for all refs to this DPLL channel */
 	rc = zl3073x_dpll_phase_meas(zldpll, ref_phase);
 	if (rc) {
