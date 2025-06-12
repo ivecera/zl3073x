@@ -21,8 +21,13 @@
 #include <linux/slab.h>
 #include <linux/sprintf.h>
 
+static char *pin_states_monitored = NULL;
+module_param(pin_states_monitored, charp, 0644);
+MODULE_PARM_DESC(pin_states_monitored, "comma seperated allowed values: selectable,connected,disconnected");
+
 #define ZL3073X_DPLL_REF_NONE		ZL3073X_NUM_INPUT_PINS
 #define ZL3073X_DPLL_REF_IS_VALID(_ref)	((_ref) != ZL3073X_DPLL_REF_NONE)
+#define ZL3073X_DPLL_ALL_PINS		0xFF
 
 /**
  * struct zl3073x_dpll_pin_info - DPLL pin info
@@ -83,6 +88,7 @@ struct zl3073x_dpll {
 
 	struct kthread_worker		*kworker;
 	struct kthread_delayed_work	work;
+	u32				events_state_mask;
 };
 
 #define pin_to_dpll(_pin)						\
@@ -90,6 +96,70 @@ struct zl3073x_dpll {
 
 #define pin_to_dev(_pin)						\
 	pin_to_dpll(_pin)->mfd
+
+static int
+zl3073x_dpll_phase_meas(struct zl3073x_dpll *zldpll,
+			u64 *ref_phase,
+			int ref_pin);
+
+static int
+zl3073x_dpll_freq_meas(struct zl3073x_dpll *zldpll, u32 *freq_offset,
+			int ref_pin);
+
+static int
+zl3073x_event_states_update(struct zl3073x_dpll *zldpll)
+{
+	char *str, *token, *cur;
+	size_t len;
+
+	zldpll->events_state_mask = 0;
+
+	if (pin_states_monitored == NULL) {
+		zldpll->events_state_mask =
+			( 1 << DPLL_PIN_STATE_SELECTABLE |
+			  1 << DPLL_PIN_STATE_CONNECTED |
+			  1 << DPLL_PIN_STATE_DISCONNECTED);
+		return 0;
+	}
+
+	len = strlen(pin_states_monitored);
+	if (len > 64) {
+		pr_err("Invalid command line arguments: Too Large\n");
+		return -E2BIG;
+	}
+
+	/* Copy str to other buffer */
+	str = kstrdup(pin_states_monitored, GFP_KERNEL);
+	if (!str) {
+		pr_err("Failed while copying arguments\n");
+		return -ENOMEM;
+	}
+
+	cur = str;
+	if (cur[0] == '\0') {
+		zldpll->events_state_mask = 0;
+		kfree(str);
+		return 0;
+	}
+	while ((token = strsep(&cur, ",")) != NULL) {
+		if (strcmp(token, "selectable") == 0)
+			zldpll->events_state_mask |=
+				(1 << DPLL_PIN_STATE_SELECTABLE);
+		else if (strcmp(token, "connected") == 0)
+			zldpll->events_state_mask |=
+				(1 << DPLL_PIN_STATE_CONNECTED);
+		else if (strcmp(token, "disconnected") == 0)
+			zldpll->events_state_mask |=
+				(1 << DPLL_PIN_STATE_DISCONNECTED);
+		else {
+			pr_err("Error: Invalid input:%s\n", token);
+			kfree(str);
+			return -EINVAL;
+		}
+	}
+	kfree(str);
+	return 0;
+}
 
 /**
  * zl3073x_dpll_is_input_pin - check if the pin is input one
@@ -410,10 +480,24 @@ zl3073x_dpll_input_pin_ffo_get(const struct dpll_pin *dpll_pin, void *pin_priv,
 			       const struct dpll_device *dpll, void *dpll_priv,
 			       s64 *ffo, struct netlink_ext_ack *extack)
 {
+	struct zl3073x_dpll *zldpll = dpll_priv;
 	struct zl3073x_dpll_pin *pin = pin_priv;
+	u32 ref_freq_offset[ZL3073X_NUM_INPUT_PINS];
+	u8 ref_id;
+	int rc;
+
+	/* Get index of the pin */
+	ref_id = zl3073x_dpll_pin_index_get(pin);
 
 	/* Values are stored in units of 2^-32 signed */
-	*ffo = sign_extend64(pin->freq_offset, 31);
+	if (zldpll->events_state_mask)
+		*ffo = sign_extend64(pin->freq_offset, 31);
+	else {
+		rc = zl3073x_dpll_freq_meas(zldpll, ref_freq_offset, ref_id);
+		if (rc)
+			return rc;
+		*ffo = ref_freq_offset[ref_id];
+	}
 
 	/* Convert to ppm -> ffo = (10^6 * value) / 2^32 */
 	*ffo = mul_s64_u64_shr(*ffo, 1000000, 32);
@@ -670,7 +754,15 @@ zl3073x_dpll_input_pin_phase_offset_get(const struct dpll_pin *dpll_pin,
 	ref_id = zl3073x_dpll_pin_index_get(pin);
 
 	/* Perform sign extension for 48bit signed value */
-	ref_phase = sign_extend64(pin->phase_offset, 47);
+	if (zldpll->events_state_mask)
+		ref_phase = sign_extend64(pin->phase_offset, 47);
+	else {
+		u64 pin_ref_phase[ZL3073X_NUM_INPUT_PINS];
+		rc = zl3073x_dpll_phase_meas(zldpll, pin_ref_phase, ref_id);
+		if (rc)
+			return rc;
+		ref_phase = pin_ref_phase[ref_id];
+	}
 
 	/* Register units are 0.01 ps -> convert it to fs */
 	ref_phase = ref_phase * 10;
@@ -2353,7 +2445,8 @@ zl3073x_dpll_init(struct zl3073x_dpll *zldpll)
 }
 
 static int
-zl3073x_dpll_freq_meas(struct zl3073x_dpll *zldpll, u32 *freq_offset)
+zl3073x_dpll_freq_meas(struct zl3073x_dpll *zldpll, u32 *freq_offset,
+			int ref_pin)
 {
 	struct zl3073x_dev *zldev = zldpll->mfd;
 	int i, rc;
@@ -2391,18 +2484,26 @@ zl3073x_dpll_freq_meas(struct zl3073x_dpll *zldpll, u32 *freq_offset)
 		return rc;
 
 	/* Read DPLL-to-REFx frequency offset measurements */
-	for (i = 0; i < ZL3073X_NUM_INPUT_PINS; i++) {
-		rc = zl3073x_read_u32(zldev, ZL_REG_REF_FREQ(i),
-				      &freq_offset[i]);
+	if (ref_pin == ZL3073X_DPLL_ALL_PINS) {
+		for (i = 0; i < ZL3073X_NUM_INPUT_PINS; i++) {
+			rc = zl3073x_read_u32(zldev, ZL_REG_REF_FREQ(i),
+					&freq_offset[i]);
+			if (rc)
+				break;
+		}
+	} else {
+		rc = zl3073x_read_u32(zldev, ZL_REG_REF_FREQ(ref_pin),
+				&freq_offset[ref_pin]);
 		if (rc)
-			break;
+			return rc;
 	}
 
 	return rc;
 }
 
 static int
-zl3073x_dpll_phase_meas(struct zl3073x_dpll *zldpll, u64 *ref_phase)
+zl3073x_dpll_phase_meas(struct zl3073x_dpll *zldpll, u64 *ref_phase,
+			int ref_pin)
 {
 	struct zl3073x_dev *zldev = zldpll->mfd;
 	u8 dpll_meas_ctrl;
@@ -2447,11 +2548,18 @@ zl3073x_dpll_phase_meas(struct zl3073x_dpll *zldpll, u64 *ref_phase)
 		return rc;
 
 	/* Read and store DPLL-to-REFx phase measurements */
-	for (i = 0; i < ZL3073X_NUM_INPUT_PINS; i++) {
-		rc = zl3073x_read_u48(zldev, ZL_REG_REF_PHASE(i),
-				      &ref_phase[i]);
+	if (ref_pin == ZL3073X_DPLL_ALL_PINS) {
+		for (i = 0; i < ZL3073X_NUM_INPUT_PINS; i++) {
+			rc = zl3073x_read_u48(zldev, ZL_REG_REF_PHASE(i),
+					&ref_phase[i]);
+			if (rc)
+				break;
+		}
+	} else {
+		rc = zl3073x_read_u48(zldev, ZL_REG_REF_PHASE(ref_pin),
+				&ref_phase[ref_pin]);
 		if (rc)
-			break;
+			return rc;
 	}
 
 	return rc;
@@ -2487,8 +2595,12 @@ zl3073x_dpll_periodic_work(struct kthread_work *work)
 	    zldpll->refsel_mode != ZL_DPLL_MODE_REFSEL_MODE_REFLOCK)
 		goto out;
 
+
+	if (zldpll->events_state_mask == 0)
+		goto out;
+
 	/* Perform phase measurement for all refs to this DPLL channel */
-	rc = zl3073x_dpll_phase_meas(zldpll, ref_phase);
+	rc = zl3073x_dpll_phase_meas(zldpll, ref_phase, ZL3073X_DPLL_ALL_PINS);
 	if (rc) {
 		dev_err(dev, "Failed to perform phase measurements: %pe\n",
 			ERR_PTR(rc));
@@ -2496,7 +2608,7 @@ zl3073x_dpll_periodic_work(struct kthread_work *work)
 	}
 
 	/* Perform frequency offset measurement for all refs */
-	rc = zl3073x_dpll_freq_meas(zldpll, ref_freq_offset);
+	rc = zl3073x_dpll_freq_meas(zldpll, ref_freq_offset, ZL3073X_DPLL_ALL_PINS);
 	if (rc) {
 		dev_err(dev,
 			"Failed to perform frequency offset measurement: %pe\n",
@@ -2544,14 +2656,16 @@ zl3073x_dpll_periodic_work(struct kthread_work *work)
 				index, sign_extend64(pin->phase_offset, 47),
 				sign_extend64(ref_phase[index], 47));
 			pin->phase_offset = ref_phase[index];
-			pin_changed = true;
+			if (zldpll->events_state_mask & (1 << state))
+				pin_changed = true;
 		}
 
 		if (ref_freq_offset[index] != pin->freq_offset) {
 			dev_dbg(dev, "INPUT%u freq offset changed: %u->%u\n",
 				index, pin->freq_offset, ref_freq_offset[index]);
 			pin->freq_offset = ref_freq_offset[index];
-			pin_changed = true;
+			if (zldpll->events_state_mask & (1 << state))
+				pin_changed = true;
 		}
 
 		if (pin_changed)
@@ -2625,6 +2739,10 @@ zl3073x_dpll_probe(struct platform_device *pdev)
 
 	pdata = pdev->dev.platform_data;
 	zldpll->id = pdata->channel;
+
+	rc = zl3073x_event_states_update(zldpll);
+	if (rc)
+		return rc;
 
 	rc = zl3073x_dpll_init(zldpll);
 	if (rc)
