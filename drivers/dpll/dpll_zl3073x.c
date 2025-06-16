@@ -23,6 +23,7 @@
 
 #define ZL3073X_DPLL_REF_NONE		ZL3073X_NUM_INPUT_PINS
 #define ZL3073X_DPLL_REF_IS_VALID(_ref)	((_ref) != ZL3073X_DPLL_REF_NONE)
+#define ZL3073X_DPLL_PHASE_OFFSET_MASK	(~0ULL << 12)
 
 /**
  * struct zl3073x_dpll_pin_info - DPLL pin info
@@ -2538,17 +2539,42 @@ zl3073x_dpll_periodic_work(struct kthread_work *work)
 			pin_changed = true;
 		}
 
-		if (ref_phase[index] != pin->phase_offset) {
-			dev_dbg(dev,
-				"INPUT%u phase offset changed: %lld->%lld\n",
+		if ((ref_phase[index] & ZL3073X_DPLL_PHASE_OFFSET_MASK) != 
+		    ((pin->phase_offset) & ZL3073X_DPLL_PHASE_OFFSET_MASK)) {
+			dev_err(dev,
+				"INPUT%u phase offset changed: 0x%llx-> 0x%llx diff:%lld mask:0x%llx lhs:-x%llx rhs:0x%llx\n",
 				index, sign_extend64(pin->phase_offset, 47),
-				sign_extend64(ref_phase[index], 47));
+				sign_extend64(ref_phase[index], 47),
+				abs(sign_extend64(pin->phase_offset, 47) - 
+					sign_extend64(ref_phase[index], 47)),
+				ZL3073X_DPLL_PHASE_OFFSET_MASK,
+				ref_phase[index] & ZL3073X_DPLL_PHASE_OFFSET_MASK,
+				(pin->phase_offset) & ZL3073X_DPLL_PHASE_OFFSET_MASK);
 			pin->phase_offset = ref_phase[index];
 			pin_changed = true;
+		} else {
+			if (abs(sign_extend64(pin->phase_offset, 47) - 
+						sign_extend64(ref_phase[index], 47)) > 2047) {
+				dev_err(dev,
+						"Debug: INPUT%u phase offset ignoring: 0x%llx->0x%llx diff:0x%llx mask:0x%llx\n",
+						index, sign_extend64(pin->phase_offset, 47),
+						sign_extend64(ref_phase[index], 47),
+						abs(sign_extend64(pin->phase_offset, 47) - 
+							sign_extend64(ref_phase[index], 47)),
+						ZL3073X_DPLL_PHASE_OFFSET_MASK);
+			} else {
+				dev_err(dev,
+						"INPUT%u phase offset ignoring: 0x%llx->0x%llx diff:0x%llx mask:0x%llx\n",
+						index, sign_extend64(pin->phase_offset, 47),
+						sign_extend64(ref_phase[index], 47),
+						abs(sign_extend64(pin->phase_offset, 47) - 
+							sign_extend64(ref_phase[index], 47)),
+						ZL3073X_DPLL_PHASE_OFFSET_MASK);
+			}
 		}
 
 		if (ref_freq_offset[index] != pin->freq_offset) {
-			dev_dbg(dev, "INPUT%u freq offset changed: %u->%u\n",
+			dev_err(dev, "INPUT%u freq offset changed: %u->%u\n",
 				index, pin->freq_offset, ref_freq_offset[index]);
 			pin->freq_offset = ref_freq_offset[index];
 			pin_changed = true;

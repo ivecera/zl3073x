@@ -1,0 +1,4 @@
+  DESCEND objtool
+  INSTALL libsubcmd_headers
+  CALL    scripts/checksyscalls.sh
+  CHK     kernel/kheaders_data.tar.xz
