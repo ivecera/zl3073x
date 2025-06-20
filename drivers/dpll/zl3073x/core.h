@@ -90,6 +90,7 @@ struct zl3073x_dev {
 	/* Monitor */
 	struct kthread_worker		*kworker;
 	struct kthread_delayed_work	work;
+	u32                             events_state_mask;
 };
 
 enum zl3073x_chip_type {

@@ -824,6 +824,7 @@ zl3073x_devm_dpll_init(struct zl3073x_dev *zldev, u8 num_dplls)
 			rc = PTR_ERR(zldpll);
 			goto error;
 		}
+		zldpll->events_state_mask = zldev->events_state_mask;
 
 		rc = zl3073x_dpll_register(zldpll);
 		if (rc) {

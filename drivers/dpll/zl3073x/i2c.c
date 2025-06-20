@@ -7,11 +7,72 @@
 #include <linux/regmap.h>
 
 #include "core.h"
+#include "dpll.h"
+
+static char *pin_states_monitored = NULL;
+module_param(pin_states_monitored, charp, 0644);
+MODULE_PARM_DESC(pin_states_monitored, "comma seperated allowed values: selectable,connected,disconnected");
+
+static int
+zl3073x_event_states_update(struct zl3073x_dev *zldpll)
+{
+	char *str, *token, *cur;
+	size_t len;
+
+	zldpll->events_state_mask = 0;
+
+	if (pin_states_monitored == NULL) {
+		zldpll->events_state_mask =
+			( 1 << DPLL_PIN_STATE_SELECTABLE |
+			  1 << DPLL_PIN_STATE_CONNECTED |
+			  1 << DPLL_PIN_STATE_DISCONNECTED);
+		return 0;
+	}
+
+	len = strlen(pin_states_monitored);
+	if (len > 64) {
+		pr_err("Invalid command line arguments: Too Large\n");
+		return -E2BIG;
+	}
+
+	/* Copy str to other buffer */
+	str = kstrdup(pin_states_monitored, GFP_KERNEL);
+	if (!str) {
+		pr_err("Failed while copying arguments\n");
+		return -ENOMEM;
+	}
+
+	cur = str;
+	if (cur[0] == '\0') {
+		zldpll->events_state_mask = 0;
+		kfree(str);
+		return 0;
+	}
+	while ((token = strsep(&cur, ",")) != NULL) {
+		if (strcmp(token, "selectable") == 0)
+			zldpll->events_state_mask |=
+				(1 << DPLL_PIN_STATE_SELECTABLE);
+		else if (strcmp(token, "connected") == 0)
+			zldpll->events_state_mask |=
+				(1 << DPLL_PIN_STATE_CONNECTED);
+		else if (strcmp(token, "disconnected") == 0)
+			zldpll->events_state_mask |=
+				(1 << DPLL_PIN_STATE_DISCONNECTED);
+		else {
+			pr_err("Error: Invalid input:%s\n", token);
+			kfree(str);
+			return -EINVAL;
+		}
+	}
+	kfree(str);
+	return 0;
+}
 
 static int zl3073x_i2c_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
 	struct zl3073x_dev *zldev;
+	int rc;
 
 	zldev = zl3073x_devm_alloc(dev);
 	if (IS_ERR(zldev))
@@ -23,6 +84,10 @@ static int zl3073x_i2c_probe(struct i2c_client *client)
 			      "Failed to initialize regmap\n");
 		return PTR_ERR(zldev->regmap);
 	}
+
+	rc = zl3073x_event_states_update(zldev);
+	if (rc)
+		return rc;
 
 	/* Initialize device and use I2C address as dev ID */
 	return zl3073x_dev_probe(zldev, i2c_get_match_data(client),

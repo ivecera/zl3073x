@@ -23,6 +23,7 @@
 
 #define ZL3073X_DPLL_REF_NONE		ZL3073X_NUM_REFS
 #define ZL3073X_DPLL_REF_IS_VALID(_ref)	((_ref) != ZL3073X_DPLL_REF_NONE)
+#define ZL3073X_DPLL_ALL_PINS		0xFF
 
 /**
  * struct zl3073x_dpll_pin - DPLL pin
@@ -60,6 +61,15 @@ struct zl3073x_dpll_pin {
 static const struct dpll_pin_frequency esync_freq_ranges[] = {
 	DPLL_PIN_FREQUENCY_RANGE(0, 1),
 };
+
+static int
+zl3073x_dpll_phase_meas(struct zl3073x_dpll *zldpll,
+			s64 *ref_phase,
+			int ref_pin);
+
+static int
+zl3073x_dpll_freq_meas(struct zl3073x_dpll *zldpll, u32 *freq_offset,
+			int ref_pin);
 
 /**
  * zl3073x_dpll_is_input_pin - check if the pin is input one
@@ -277,10 +287,24 @@ zl3073x_dpll_input_pin_ffo_get(const struct dpll_pin *dpll_pin, void *pin_priv,
 			       const struct dpll_device *dpll, void *dpll_priv,
 			       s64 *ffo, struct netlink_ext_ack *extack)
 {
+	struct zl3073x_dpll *zldpll = dpll_priv;
 	struct zl3073x_dpll_pin *pin = pin_priv;
+	u32 ref_freq_offset[ZL3073X_NUM_INPUT_PINS];
+	u8 ref_id;
+	int rc;
 
 	/* Values are stored in units of 2^-32 signed */
-	*ffo = sign_extend64(pin->freq_offset, 31);
+	if (zldpll->events_state_mask)
+		*ffo = sign_extend64(pin->freq_offset, 31);
+	else {
+		if ( pin->id >= ZL3073X_NUM_REFS )
+			return -EINVAL;
+
+		rc = zl3073x_dpll_freq_meas(zldpll, ref_freq_offset, pin->id);
+		if (rc)
+			return rc;
+		*ffo = ref_freq_offset[ref_id];
+	}
 
 	/* Convert to ppm -> ffo = (10^6 * value) / 2^32 */
 	*ffo = mul_s64_u64_shr(*ffo, 1000000, 32);
@@ -547,7 +571,20 @@ zl3073x_dpll_input_pin_phase_offset_get(const struct dpll_pin *dpll_pin,
 		return 0;
 	}
 
-	ref_phase = pin->phase_offset;
+
+	if (zldev->events_state_mask)
+		ref_phase = pin->phase_offset;
+	else {
+		/* Get index of the pin */
+		u64 pin_ref_phase[ZL3073X_NUM_INPUT_PINS];
+		if ( pin->id >= ZL3073X_NUM_REFS )
+			return -EINVAL;
+
+		rc = zl3073x_dpll_phase_meas(zldpll, pin_ref_phase, pin->id);
+		if (rc)
+			return rc;
+		ref_phase = pin_ref_phase[pin->id];
+	}
 
 	/* The DPLL being locked to a higher freq than the current ref
 	 * the phase offset is modded to the period of the signal
@@ -1941,7 +1978,8 @@ zl3073x_dpll_device_unregister(struct zl3073x_dpll *zldpll)
  * Return: 0 on success, <0 on error
  */
 static int
-zl3073x_dpll_freq_meas(struct zl3073x_dpll *zldpll, u32 *freq_offsets)
+zl3073x_dpll_freq_meas(struct zl3073x_dpll *zldpll, u32 *freq_offsets,
+			int ref_pin)
 {
 	struct zl3073x_dev *zldev = zldpll->dev;
 	int i, rc;
@@ -1979,11 +2017,18 @@ zl3073x_dpll_freq_meas(struct zl3073x_dpll *zldpll, u32 *freq_offsets)
 		return rc;
 
 	/* Read DPLL-to-REFx frequency offset measurements */
-	for (i = 0; i < ZL3073X_NUM_INPUT_PINS; i++) {
-		rc = zl3073x_read_u32(zldev, ZL_REG_REF_FREQ(i),
-				      &freq_offsets[i]);
+	if (ref_pin == ZL3073X_DPLL_ALL_PINS) {
+		for (i = 0; i < ZL3073X_NUM_INPUT_PINS; i++) {
+			rc = zl3073x_read_u32(zldev, ZL_REG_REF_FREQ(i),
+					&freq_offsets[i]);
+			if (rc)
+				break;
+		}
+	} else {
+		rc = zl3073x_read_u32(zldev, ZL_REG_REF_FREQ(ref_pin),
+				&freq_offsets[ref_pin]);
 		if (rc)
-			break;
+			return rc;
 	}
 
 	return rc;
@@ -2000,7 +2045,8 @@ zl3073x_dpll_freq_meas(struct zl3073x_dpll *zldpll, u32 *freq_offsets)
  * Return: 0 on success, <0 on error
  */
 static int
-zl3073x_dpll_phase_meas(struct zl3073x_dpll *zldpll, s64 *ref_phases)
+zl3073x_dpll_phase_meas(struct zl3073x_dpll *zldpll, s64 *ref_phases,
+			int ref_pin)
 {
 	struct zl3073x_dev *zldev = zldpll->dev;
 	u8 dpll_meas_ctrl;
@@ -2047,15 +2093,25 @@ zl3073x_dpll_phase_meas(struct zl3073x_dpll *zldpll, s64 *ref_phases)
 		return rc;
 
 	/* Read and store DPLL-to-REFx phase measurements */
-	for (i = 0; i < ZL3073X_NUM_REFS; i++) {
-		u64 ref_phase;
+	if (ref_pin == ZL3073X_DPLL_ALL_PINS) {
+		for (i = 0; i < ZL3073X_NUM_REFS; i++) {
+			u64 ref_phase;
 
-		rc = zl3073x_read_u48(zldev, ZL_REG_REF_PHASE(i), &ref_phase);
+			rc = zl3073x_read_u48(zldev, ZL_REG_REF_PHASE(i), &ref_phase);
+			if (rc)
+				break;
+
+			/* Convert to PPS */
+			ref_phases[i] = div_s64(sign_extend64(ref_phase, 47), 100);
+		}
+	} else {
+		u64 ref_phase;
+		rc = zl3073x_read_u48(zldev, ZL_REG_REF_PHASE(ref_pin), &ref_phase);
 		if (rc)
-			break;
+			return rc;
 
 		/* Convert to PPS */
-		ref_phases[i] = div_s64(sign_extend64(ref_phase, 47), 100);
+		ref_phases[ref_pin] = div_s64(sign_extend64(ref_phase, 47), 100);
 	}
 
 	return rc;
@@ -2103,10 +2159,13 @@ zl3073x_dpll_changes_check(struct zl3073x_dpll *zldpll)
 	    zldpll->refsel_mode != ZL_DPLL_MODE_REFSEL_MODE_REFLOCK)
 		return;
 
+	if (zldev->events_state_mask == 0)
+		return;
+
 	/* Perform measurements every second */
 	if (zldpll->check_count % 2) {
 		/* Latch phase measurement */
-		rc = zl3073x_dpll_phase_meas(zldpll, ref_phases);
+		rc = zl3073x_dpll_phase_meas(zldpll, ref_phases, ZL3073X_DPLL_ALL_PINS );
 		if (rc) {
 			dev_err(dev,
 				"Failed to perform phase measurements: %pe\n",
@@ -2115,7 +2174,7 @@ zl3073x_dpll_changes_check(struct zl3073x_dpll *zldpll)
 		}
 
 		/* Latch frequency offset measurement */
-		rc = zl3073x_dpll_freq_meas(zldpll, ref_freq_offsets);
+		rc = zl3073x_dpll_freq_meas(zldpll, ref_freq_offsets, ZL3073X_DPLL_ALL_PINS);
 		if (rc) {
 			dev_err(dev,
 				"Failed to perform frequency offset measurement: %pe\n",
@@ -2166,7 +2225,8 @@ zl3073x_dpll_changes_check(struct zl3073x_dpll *zldpll)
 			dev_dbg(dev, "%s phase offset changed: %lld->%lld\n",
 				pin->label, pin->phase_offset, ref_phases[ref]);
 			pin->phase_offset = ref_phases[ref];
-			pin_changed = true;
+			if (zldev->events_state_mask & (1 << state))
+				pin_changed = true;
 		}
 
 		if (ref_status == ZL_REF_MON_STATUS_OK &&
@@ -2175,7 +2235,8 @@ zl3073x_dpll_changes_check(struct zl3073x_dpll *zldpll)
 				pin->label, pin->freq_offset,
 				ref_freq_offsets[ref]);
 			pin->freq_offset = ref_freq_offsets[ref];
-			pin_changed = true;
+			if (zldev->events_state_mask & (1 << state))
+				pin_changed = true;
 		}
 
 		if (pin_changed)
