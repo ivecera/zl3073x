@@ -2123,7 +2123,6 @@ zl3073x_dpll_changes_check(struct zl3073x_dpll *zldpll)
 			return;
 		}
 	}
-	zldpll->check_count++;
 
 
 	list_for_each_entry(pin, &zldpll->pins, list) {
@@ -2161,26 +2160,29 @@ zl3073x_dpll_changes_check(struct zl3073x_dpll *zldpll)
 			return;
 		}
 
-		if (ref_status == ZL_REF_MON_STATUS_OK &&
-		    pin->phase_offset != ref_phases[ref]) {
-			dev_dbg(dev, "%s phase offset changed: %lld->%lld\n",
-				pin->label, pin->phase_offset, ref_phases[ref]);
-			pin->phase_offset = ref_phases[ref];
-			pin_changed = true;
-		}
+		if (zldpll->check_count % 2) {
+			if (ref_status == ZL_REF_MON_STATUS_OK &&
+					pin->phase_offset != ref_phases[ref]) {
+				dev_dbg(dev, "%s phase offset changed: %lld->%lld\n",
+						pin->label, pin->phase_offset, ref_phases[ref]);
+				pin->phase_offset = ref_phases[ref];
+				pin_changed = true;
+			}
 
-		if (ref_status == ZL_REF_MON_STATUS_OK &&
-		    ref_freq_offsets[ref] != pin->freq_offset) {
-			dev_dbg(dev, "%s freq offset changed: %u->%u\n",
-				pin->label, pin->freq_offset,
-				ref_freq_offsets[ref]);
-			pin->freq_offset = ref_freq_offsets[ref];
-			pin_changed = true;
+			if (ref_status == ZL_REF_MON_STATUS_OK &&
+					ref_freq_offsets[ref] != pin->freq_offset) {
+				dev_dbg(dev, "%s freq offset changed: %u->%u\n",
+						pin->label, pin->freq_offset,
+						ref_freq_offsets[ref]);
+				pin->freq_offset = ref_freq_offsets[ref];
+				pin_changed = true;
+			}
 		}
 
 		if (pin_changed)
 			dpll_pin_change_ntf(pin->dpll_pin);
 	}
+	zldpll->check_count++;
 }
 
 /**
