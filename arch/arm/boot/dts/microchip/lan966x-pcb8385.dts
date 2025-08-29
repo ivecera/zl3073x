@@ -340,6 +340,7 @@
 };
 
 &switch {
+	local-mac-address = [ 22 65 5a 2d bf 80 ];
 	status = "okay";
 };
 
