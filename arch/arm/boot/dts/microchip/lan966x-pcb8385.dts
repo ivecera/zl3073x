@@ -252,7 +252,7 @@
 				label = "1PPS IN";
 				supported-frequencies-hz = /bits/ 64 <1>;
 			};
-			pin@7 { /* REF3N */
+			ref3n: pin@7 { /* REF3N */
 				reg = <7>;
 
 				connection-type = "ext";
@@ -265,6 +265,7 @@
 				connection-type = "ext";
 				esync-control;
 				label = "Feedb 25M IN";
+				ref-sync-sources = <&ref3n>;
 				supported-frequencies-hz =
 					/bits/ 64 <10000000 25000000>;
 			};
