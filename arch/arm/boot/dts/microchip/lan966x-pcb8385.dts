@@ -32,24 +32,28 @@
 			label = "cu0:green";
 			gpios = <&sgpio_out 2 0 GPIO_ACTIVE_LOW>;
 			default-state = "off";
+			linux,default-trigger = "e200413c.mdio-mii:01:link";
 		};
 
 		led-p1-yellow {
 			label = "cu0:yellow";
 			gpios = <&sgpio_out 2 1 GPIO_ACTIVE_LOW>;
 			default-state = "off";
+			linux,default-trigger = "e200413c.mdio-mii:01:1Gbps";
 		};
 
 		led-p2-green {
 			label = "cu1:green";
 			gpios = <&sgpio_out 3 0 GPIO_ACTIVE_LOW>;
 			default-state = "off";
+			linux,default-trigger = "e200413c.mdio-mii:02:link";
 		};
 
 		led-p2-yellow {
 			label = "cu1:yellow";
 			gpios = <&sgpio_out 3 1 GPIO_ACTIVE_LOW>;
 			default-state = "off";
+			linux,default-trigger = "e200413c.mdio-mii:02:1Gbps";
 		};
 	};
 };
@@ -127,6 +131,32 @@
 	};
 };
 
+&mdio1 {
+	status = "okay";
+};
+
+&phy0 {
+	status = "okay";
+};
+
+&phy1 {
+	status = "okay";
+};
+
+&port0 {
+	status = "okay";
+	phy-handle = <&phy0>;
+	phy-mode = "gmii";
+	phys = <&serdes 0 CU(0)>;
+};
+
+&port1 {
+	status = "okay";
+	phy-handle = <&phy1>;
+	phy-mode = "gmii";
+	phys = <&serdes 1 CU(1)>;
+};
+
 &sdmmc0 {
 	bus-width = <8>;
 	cap-mmc-highspeed;
@@ -136,6 +166,10 @@
 	pinctrl-names = "default";
 	no-1-8-v;
 	tx-phase = <0>; /* 180 degrees phase shift */
+	status = "okay";
+};
+
+&serdes {
 	status = "okay";
 };
 
@@ -151,6 +185,10 @@
 	gpio@1 {
 		ngpios = <64>;
 	};
+};
+
+&switch {
+	status = "okay";
 };
 
 &usart3 {
