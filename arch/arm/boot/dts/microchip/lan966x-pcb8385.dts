@@ -69,6 +69,19 @@
 };
 
 &gpio {
+	emmc_sd_pins: emmc-sd-pins {
+		/* eMMC_SD - CMD, CLK, D0, D1, D2, D3, RSTN */
+		pins = "GPIO_67", "GPIO_68", "GPIO_69", "GPIO_70",
+			"GPIO_71", "GPIO_72", "GPIO_77";
+		function = "emmc_sd";
+	};
+
+	emmc_pins: emmc-pins {
+		/* eMMC - D4, D5, D6, D7 */
+		pins = "GPIO_73", "GPIO_74", "GPIO_75", "GPIO_76";
+		function = "emmc";
+	};
+
 	fc0_b_pins: fc0-b-pins {
 		/* SCL, SDA */
 		pins = "GPIO_25", "GPIO_26";
@@ -107,6 +120,18 @@
 		compatible = "atmel,24c01";
 		reg = <0x55>;
 	};
+};
+
+&sdmmc0 {
+	bus-width = <8>;
+	cap-mmc-highspeed;
+	cap-mmc-hw-reset;
+	non-removable;
+	pinctrl-0 = <&emmc_sd_pins>, <&emmc_pins>;
+	pinctrl-names = "default";
+	no-1-8-v;
+	tx-phase = <0>; /* 180 degrees phase shift */
+	status = "okay";
 };
 
 &sgpio {
