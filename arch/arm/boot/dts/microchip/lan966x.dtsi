@@ -504,6 +504,17 @@
 			status = "disabled";
 		};
 
+		sdmmc0: sdio-host@e0830000 {
+			compatible = "microchip,lan966x-sdhci";
+			reg = <0xe0830000 0x00000300>;
+			interrupts = <GIC_SPI 66 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&clks GCK_ID_SDMMC0>, <&clks GCK_ID_SDMMC0>;
+			clock-names = "hclock", "multclk";
+			assigned-clocks = <&clks GCK_ID_SDMMC0>;
+			assigned-clock-rates = <50000000>;
+			status = "disabled";
+		};
+
 		reset: reset-controller@e200400c {
 			compatible = "microchip,lan966x-switch-reset";
 			reg = <0xe200400c 0x4>;
