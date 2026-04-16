@@ -34,6 +34,11 @@
 		};
 	};
 
+	psci {
+		compatible = "arm,psci-1.0";
+		method = "smc";
+	};
+
 	clocks {
 		sys_clk: sys_clk {
 			compatible = "fixed-clock";
