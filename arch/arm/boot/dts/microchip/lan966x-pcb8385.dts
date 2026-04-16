@@ -83,6 +83,12 @@
 	status = "okay";
 };
 
+&flx4 {
+	atmel,flexcom-mode = <ATMEL_FLEXCOM_MODE_SPI>;
+	status = "okay";
+
+};
+
 &gpio {
 	emmc_sd_pins: emmc-sd-pins {
 		/* eMMC_SD - CMD, CLK, D0, D1, D2, D3, RSTN */
@@ -119,6 +125,17 @@
 		/* RX, TX */
 		pins = "GPIO_52", "GPIO_53";
 		function = "fc3_b";
+	};
+
+	fc4_b_pins: fc4-b-pins {
+		/* SCK, MISO, MOSI */
+		pins = "GPIO_56", "GPIO_57", "GPIO_58";
+		function = "fc4_b";
+	};
+
+	fc_shrd13_pins: fc-shrd13-pins {
+		pins = "GPIO_62";
+		function = "fc_shrd13";
 	};
 
 	sgpio_a_pins: sgpio-a-pins {
@@ -218,6 +235,22 @@
 	};
 	gpio@1 {
 		ngpios = <64>;
+	};
+};
+
+&spi4 {
+	clock-names = "spi_clk";
+	pinctrl-0 = <&fc4_b_pins>, <&fc_shrd13_pins>;
+	pinctrl-names = "default";
+	cs-gpios = <&gpio 62 GPIO_ACTIVE_LOW>;
+	dmas = <0>, <0>;
+	status = "okay";
+
+	spidev: spidev@0 {
+		compatible = "linux,spidev";
+		reg = <0>;
+		spi-max-frequency = <2000000>;
+		status = "okay";
 	};
 };
 
