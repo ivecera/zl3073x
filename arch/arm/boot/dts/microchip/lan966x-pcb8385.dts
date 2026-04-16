@@ -99,6 +99,11 @@
 		pins = "GPIO_32", "GPIO_33", "GPIO_34", "GPIO_35";
 		function = "sgpio_a";
 	};
+
+	usb_host_a_pins: usb_host_a_pins {
+		pins = "GPIO_65", "GPIO_66";
+		function = "usb_host_a";
+	};
 };
 
 &i2c0 {
@@ -150,6 +155,13 @@
 
 &usart3 {
 	pinctrl-0 = <&fc3_b_pins>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&usb {
+	dr_mode = "host";
+	pinctrl-0 = <&usb_host_a_pins>;
 	pinctrl-names = "default";
 	status = "okay";
 };
