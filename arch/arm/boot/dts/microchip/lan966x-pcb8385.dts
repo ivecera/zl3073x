@@ -68,6 +68,11 @@
 	status = "okay";
 };
 
+&flx1 {
+	atmel,flexcom-mode = <ATMEL_FLEXCOM_MODE_TWI>;
+	status = "okay";
+};
+
 &flx2 {
 	atmel,flexcom-mode = <ATMEL_FLEXCOM_MODE_USART>;
 	status = "okay";
@@ -96,6 +101,12 @@
 		/* SCL, SDA */
 		pins = "GPIO_25", "GPIO_26";
 		function = "fc0_b";
+	};
+
+	fc1_c_pins: fc1-c-pins {
+		/* SCL, SDA */
+		pins = "GPIO_47", "GPIO_48";
+		function = "fc1_c";
 	};
 
 	fc2_b_pins: fc2-b-pins {
@@ -141,6 +152,17 @@
 		compatible = "atmel,24c01";
 		reg = <0x55>;
 	};
+};
+
+&i2c1 {
+	pinctrl-0 = <&fc1_c_pins>;
+	pinctrl-names = "default";
+	dmas = <0>, <0>;
+	i2c-analog-filter;
+	i2c-digital-filter;
+	i2c-digital-filter-width-ns = <35>;
+	i2c-sda-hold-time-ns = <1500>;
+	status = "okay";
 };
 
 &mdio1 {
