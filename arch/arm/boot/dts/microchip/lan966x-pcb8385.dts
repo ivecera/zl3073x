@@ -138,6 +138,12 @@
 		function = "fc_shrd13";
 	};
 
+	miim_a_pins: mdio-pins {
+		/* MDC, MDIO */
+		pins =  "GPIO_28", "GPIO_29";
+		function = "miim_a";
+	};
+
 	sgpio_a_pins: sgpio-a-pins {
 		/* SCK, D0, D1, LD */
 		pins = "GPIO_32", "GPIO_33", "GPIO_34", "GPIO_35";
@@ -179,6 +185,12 @@
 	i2c-digital-filter;
 	i2c-digital-filter-width-ns = <35>;
 	i2c-sda-hold-time-ns = <1500>;
+	status = "okay";
+};
+
+&mdio0 {
+	pinctrl-0 = <&miim_a_pins>;
+	pinctrl-names = "default";
 	status = "okay";
 };
 
