@@ -2054,6 +2054,10 @@ dpll_set_from_nlattr(struct dpll_device *dpll, struct genl_info *info)
 			if (ret)
 				return ret;
 			break;
+		case DPLL_A_BANDWIDTH:
+		case DPLL_A_PHASE_SLOPE_LIMIT:
+		case DPLL_A_HITLESS_SWITCHING:
+			return -EOPNOTSUPP;
 		}
 	}
 

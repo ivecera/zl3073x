@@ -43,6 +43,64 @@ with a ``DPLL_CMD_DEVICE_GET`` `dump` request or
 a ``DPLL_CMD_DEVICE_ID_GET`` `do` request, where the one must provide
 attributes that result in single device match.
 
+Bandwidth
+---------
+
+DPLL loop bandwidth determines how fast the DPLL tracks changes in
+the input signal. Narrow bandwidths provide better jitter filtering
+but slower response, while wider bandwidths allow faster tracking.
+
+The current bandwidth is reported in microhertz (µHz) via the
+``DPLL_A_BANDWIDTH`` attribute. The supported bandwidth values are
+reported as an array of min/max ranges via ``DPLL_A_BANDWIDTH_SUPPORTED``.
+A range where min equals max indicates a single discrete supported value
+(fixed preset). A range where min differs from max indicates a continuous
+range.
+
+The bandwidth can be changed with ``DPLL_CMD_DEVICE_SET`` command.
+The ``DPLL_BANDWIDTH_DIVIDER`` constant (1000000) can be used by
+userspace to convert microhertz to hertz.
+
+  ====================================== ==================================
+  ``DPLL_A_BANDWIDTH``                   attr current bandwidth in µHz
+  ``DPLL_A_BANDWIDTH_SUPPORTED``         nested attr provides supported
+                                         bandwidth ranges
+    ``DPLL_A_BANDWIDTH_MIN``             attr minimum value of range
+    ``DPLL_A_BANDWIDTH_MAX``             attr maximum value of range
+  ====================================== ==================================
+
+Phase slope limit
+-----------------
+
+The phase slope limiter (PSL) limits the rate of output phase change
+due to input phase transients. This protects downstream equipment from
+fast phase steps during reference rearrangement upstream.
+
+The current PSL value is reported in nanoseconds per second (ns/s) via
+``DPLL_A_PHASE_SLOPE_LIMIT``. A value of 0 means unlimited (PSL disabled).
+The supported range is reported via ``DPLL_A_PHASE_SLOPE_LIMIT_MIN`` and
+``DPLL_A_PHASE_SLOPE_LIMIT_MAX``.
+
+  ====================================== ==================================
+  ``DPLL_A_PHASE_SLOPE_LIMIT``           attr current PSL value in ns/s
+  ``DPLL_A_PHASE_SLOPE_LIMIT_MIN``       attr minimum supported PSL value
+  ``DPLL_A_PHASE_SLOPE_LIMIT_MAX``       attr maximum supported PSL value
+  ====================================== ==================================
+
+Hitless reference switching
+---------------------------
+
+When enabled, the DPLL seamlessly switches to a backup reference upon
+loss of the primary source without introducing phase or frequency
+discontinuities at its output.
+
+The feature state is reported and controlled via
+``DPLL_A_HITLESS_SWITCHING`` using ``enum dpll_feature_state`` values.
+
+  ====================================== ==================================
+  ``DPLL_A_HITLESS_SWITCHING``           attr state of a feature
+  ====================================== ==================================
+
 Pin object
 ==========
 
@@ -391,12 +449,24 @@ suffix according to attribute purpose.
     ``DPLL_A_LOCK_STATUS``             attr dpll device lock status
     ``DPLL_A_TEMP``                    attr device temperature info
     ``DPLL_A_TYPE``                    attr type of dpll device
+    ``DPLL_A_BANDWIDTH``               attr loop bandwidth in µHz
+    ``DPLL_A_BANDWIDTH_SUPPORTED``     nested attr supported bandwidth
+                                       ranges
+      ``DPLL_A_BANDWIDTH_MIN``         attr minimum value of range
+      ``DPLL_A_BANDWIDTH_MAX``         attr maximum value of range
+    ``DPLL_A_PHASE_SLOPE_LIMIT``       attr phase slope limit in ns/s
+    ``DPLL_A_PHASE_SLOPE_LIMIT_MIN``   attr minimum supported PSL
+    ``DPLL_A_PHASE_SLOPE_LIMIT_MAX``   attr maximum supported PSL
+    ``DPLL_A_HITLESS_SWITCHING``       attr hitless switching state
   ==================================== =================================
 
   ==================================== =================================
   ``DPLL_CMD_DEVICE_SET``              command to set dpll device config
     ``DPLL_A_ID``                      attr internal dpll device index
     ``DPLL_A_MODE``                    attr selection mode to configure
+    ``DPLL_A_BANDWIDTH``               attr loop bandwidth in µHz
+    ``DPLL_A_PHASE_SLOPE_LIMIT``       attr phase slope limit in ns/s
+    ``DPLL_A_HITLESS_SWITCHING``       attr hitless switching state
   ==================================== =================================
 
 Constants identifying command types for pins uses a

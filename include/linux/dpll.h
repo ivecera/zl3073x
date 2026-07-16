@@ -21,6 +21,23 @@ struct dpll_pin_esync;
 struct fwnode_handle;
 struct ref_tracker;
 
+struct dpll_device_bw_range {
+	u32 min;
+	u32 max;
+};
+
+struct dpll_device_bw {
+	u32 bandwidth;
+	const struct dpll_device_bw_range *range;
+	u8 range_num;
+};
+
+struct dpll_device_psl {
+	u32 psl;
+	u32 min;
+	u32 max;
+};
+
 struct dpll_device_ops {
 	int (*mode_get)(const struct dpll_device *dpll, void *dpll_priv,
 			enum dpll_mode *mode, struct netlink_ext_ack *extack);
