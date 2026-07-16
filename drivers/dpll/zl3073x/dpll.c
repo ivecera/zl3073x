@@ -1583,6 +1583,48 @@ zl3073x_dpll_bandwidth_set(const struct dpll_device *dpll,
 }
 
 static int
+zl3073x_dpll_phase_slope_limit_get(const struct dpll_device *dpll,
+				   void *dpll_priv,
+				   struct dpll_device_psl *psl,
+				   struct netlink_ext_ack *extack)
+{
+	struct zl3073x_dpll *zldpll = dpll_priv;
+	const struct zl3073x_chan *chan;
+
+	guard(mutex)(&zldpll->lock);
+
+	chan = zl3073x_chan_state_get(zldpll->dev, zldpll->id);
+
+	psl->psl = zl3073x_chan_psl_get(chan);
+	psl->min = 1;
+	psl->max = ZL_DPLL_PSL_MAX;
+
+	return 0;
+}
+
+static int
+zl3073x_dpll_phase_slope_limit_set(const struct dpll_device *dpll,
+				   void *dpll_priv, u32 psl,
+				   struct netlink_ext_ack *extack)
+{
+	struct zl3073x_dpll *zldpll = dpll_priv;
+	struct zl3073x_chan chan;
+
+	if (psl > ZL_DPLL_PSL_MAX) {
+		NL_SET_ERR_MSG(extack,
+			       "phase slope limit out of range");
+		return -EINVAL;
+	}
+
+	guard(mutex)(&zldpll->lock);
+
+	chan = *zl3073x_chan_state_get(zldpll->dev, zldpll->id);
+	zl3073x_chan_psl_set(&chan, psl);
+
+	return zl3073x_chan_state_set(zldpll->dev, zldpll->id, &chan);
+}
+
+static int
 zl3073x_dpll_hitless_switching_get(const struct dpll_device *dpll,
 				   void *dpll_priv,
 				   enum dpll_feature_state *state,
@@ -1675,6 +1717,8 @@ static const struct dpll_device_ops zl3073x_dpll_device_ops = {
 	.freq_monitor_set = zl3073x_dpll_freq_monitor_set,
 	.hitless_switching_get = zl3073x_dpll_hitless_switching_get,
 	.hitless_switching_set = zl3073x_dpll_hitless_switching_set,
+	.phase_slope_limit_get = zl3073x_dpll_phase_slope_limit_get,
+	.phase_slope_limit_set = zl3073x_dpll_phase_slope_limit_set,
 	.supported_modes_get = zl3073x_dpll_supported_modes_get,
 };
 

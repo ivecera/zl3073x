@@ -229,6 +229,10 @@ int zl3073x_chan_state_fetch(struct zl3073x_dev *zldev, u8 index)
 	if (rc)
 		return rc;
 
+	rc = zl3073x_read_u16(zldev, ZL_REG_DPLL_PSL, &chan->psl);
+	if (rc)
+		return rc;
+
 	return 0;
 }
 
@@ -320,6 +324,13 @@ int zl3073x_chan_state_set(struct zl3073x_dev *zldev, u8 index,
 	if (dchan->bw_var != chan->bw_var) {
 		rc = zl3073x_write_u8(zldev, ZL_REG_DPLL_BW_VAR,
 				      chan->bw_var);
+		if (rc)
+			return rc;
+	}
+
+	/* Update changed phase slope limit register */
+	if (dchan->psl != chan->psl) {
+		rc = zl3073x_write_u16(zldev, ZL_REG_DPLL_PSL, chan->psl);
 		if (rc)
 			return rc;
 	}

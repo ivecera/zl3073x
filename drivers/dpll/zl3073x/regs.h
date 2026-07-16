@@ -275,6 +275,10 @@
 
 #define ZL_REG_DPLL_BW_VAR			ZL_REG(12, 0x21, 1)
 
+#define ZL_REG_DPLL_PSL				ZL_REG(12, 0x22, 2)
+#define ZL_DPLL_PSL_UNLIMITED			0
+#define ZL_DPLL_PSL_MAX				65535
+
 #define ZL_REG_DPLL_REF_PRIO(_idx)					\
 	ZL_REG_IDX(_idx, 12, 0x52, 1, ZL3073X_NUM_REFS / 2, 1)
 #define ZL_DPLL_REF_PRIO_REF_P			GENMASK(3, 0)

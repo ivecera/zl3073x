@@ -13,6 +13,7 @@ struct zl3073x_dev;
 
 /**
  * struct zl3073x_chan - DPLL channel state
+ * @psl: phase slope limit register value
  * @ctrl: DPLL control register value
  * @mode_refsel: mode and reference selection register value
  * @ref_prio: reference priority registers (4 bits per ref, P/N packed)
@@ -24,6 +25,7 @@ struct zl3073x_dev;
  */
 struct zl3073x_chan {
 	struct_group(cfg,
+		u16	psl;
 		u8	ctrl;
 		u8	mode_refsel;
 		u8	ref_prio[ZL3073X_NUM_REFS / 2];
@@ -258,6 +260,27 @@ static inline u8 zl3073x_chan_refsel_state_get(const struct zl3073x_chan *chan)
 static inline u8 zl3073x_chan_refsel_ref_get(const struct zl3073x_chan *chan)
 {
 	return FIELD_GET(ZL_DPLL_REFSEL_STATUS_REFSEL, chan->refsel_status);
+}
+
+/**
+ * zl3073x_chan_psl_get - get phase slope limit
+ * @chan: pointer to channel state
+ *
+ * Return: phase slope limit in ns/s, 0 means unlimited
+ */
+static inline u16 zl3073x_chan_psl_get(const struct zl3073x_chan *chan)
+{
+	return chan->psl;
+}
+
+/**
+ * zl3073x_chan_psl_set - set phase slope limit
+ * @chan: pointer to channel state
+ * @psl: phase slope limit in ns/s, 0 means unlimited
+ */
+static inline void zl3073x_chan_psl_set(struct zl3073x_chan *chan, u16 psl)
+{
+	chan->psl = psl;
 }
 
 u32 zl3073x_chan_bandwidth_get(const struct zl3073x_chan *chan);
