@@ -1529,6 +1529,59 @@ zl3073x_dpll_freq_monitor_set(const struct dpll_device *dpll,
 	return 0;
 }
 
+static const struct dpll_device_bw_range zl3073x_bw_ranges[] = {
+	{ .min =       100, .max =  13335210 },
+	{ .min =  14000000, .max =  14000000 },
+	{ .min =  29000000, .max =  29000000 },
+	{ .min =  61000000, .max =  61000000 },
+	{ .min = 141000000, .max = 141000000 },
+	{ .min = 403000000, .max = 403000000 },
+	{ .min = 470000000, .max = 470000000 },
+};
+
+static int
+zl3073x_dpll_bandwidth_get(const struct dpll_device *dpll,
+			   void *dpll_priv,
+			   struct dpll_device_bw *bw,
+			   struct netlink_ext_ack *extack)
+{
+	struct zl3073x_dpll *zldpll = dpll_priv;
+	const struct zl3073x_chan *chan;
+
+	guard(mutex)(&zldpll->lock);
+
+	chan = zl3073x_chan_state_get(zldpll->dev, zldpll->id);
+
+	bw->bandwidth = zl3073x_chan_bandwidth_get(chan);
+	bw->range = zl3073x_bw_ranges;
+	bw->range_num = ARRAY_SIZE(zl3073x_bw_ranges);
+
+	return 0;
+}
+
+static int
+zl3073x_dpll_bandwidth_set(const struct dpll_device *dpll,
+			   void *dpll_priv, u32 bandwidth,
+			   struct netlink_ext_ack *extack)
+{
+	struct zl3073x_dpll *zldpll = dpll_priv;
+	struct zl3073x_chan chan;
+	int rc;
+
+	guard(mutex)(&zldpll->lock);
+
+	chan = *zl3073x_chan_state_get(zldpll->dev, zldpll->id);
+
+	rc = zl3073x_chan_bandwidth_set(zldpll->dev, &chan, bandwidth);
+	if (rc) {
+		NL_SET_ERR_MSG(extack,
+			       "unsupported bandwidth value");
+		return rc;
+	}
+
+	return zl3073x_chan_state_set(zldpll->dev, zldpll->id, &chan);
+}
+
 static int
 zl3073x_dpll_hitless_switching_get(const struct dpll_device *dpll,
 				   void *dpll_priv,
@@ -1616,6 +1669,8 @@ static const struct dpll_device_ops zl3073x_dpll_device_ops = {
 	.phase_offset_avg_factor_set = zl3073x_dpll_phase_offset_avg_factor_set,
 	.phase_offset_monitor_get = zl3073x_dpll_phase_offset_monitor_get,
 	.phase_offset_monitor_set = zl3073x_dpll_phase_offset_monitor_set,
+	.bandwidth_get = zl3073x_dpll_bandwidth_get,
+	.bandwidth_set = zl3073x_dpll_bandwidth_set,
 	.freq_monitor_get = zl3073x_dpll_freq_monitor_get,
 	.freq_monitor_set = zl3073x_dpll_freq_monitor_set,
 	.hitless_switching_get = zl3073x_dpll_hitless_switching_get,

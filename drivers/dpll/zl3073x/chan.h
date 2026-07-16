@@ -16,6 +16,8 @@ struct zl3073x_dev;
  * @ctrl: DPLL control register value
  * @mode_refsel: mode and reference selection register value
  * @ref_prio: reference priority registers (4 bits per ref, P/N packed)
+ * @bw_fixed: fixed bandwidth preset register value
+ * @bw_var: variable bandwidth register value
  * @mon_status: monitor status register value
  * @refsel_status: reference selection status register value
  * @df_offset: frequency offset vs tracked reference in 2^-48 steps
@@ -25,6 +27,8 @@ struct zl3073x_chan {
 		u8	ctrl;
 		u8	mode_refsel;
 		u8	ref_prio[ZL3073X_NUM_REFS / 2];
+		u8	bw_fixed;
+		u8	bw_var;
 	);
 	struct_group(stat,
 		u8	mon_status;
@@ -255,5 +259,9 @@ static inline u8 zl3073x_chan_refsel_ref_get(const struct zl3073x_chan *chan)
 {
 	return FIELD_GET(ZL_DPLL_REFSEL_STATUS_REFSEL, chan->refsel_status);
 }
+
+u32 zl3073x_chan_bandwidth_get(const struct zl3073x_chan *chan);
+int zl3073x_chan_bandwidth_set(struct zl3073x_dev *zldev,
+			       struct zl3073x_chan *chan, u32 uhz);
 
 #endif /* _ZL3073X_CHAN_H */

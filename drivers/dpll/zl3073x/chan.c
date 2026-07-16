@@ -3,6 +3,8 @@
 #include <linux/cleanup.h>
 #include <linux/delay.h>
 #include <linux/dev_printk.h>
+#include <linux/int_log.h>
+#include <linux/math.h>
 #include <linux/string.h>
 #include <linux/types.h>
 
@@ -218,6 +220,15 @@ int zl3073x_chan_state_fetch(struct zl3073x_dev *zldev, u8 index)
 			return rc;
 	}
 
+	rc = zl3073x_read_u8(zldev, ZL_REG_DPLL_BW_FIXED,
+			     &chan->bw_fixed);
+	if (rc)
+		return rc;
+
+	rc = zl3073x_read_u8(zldev, ZL_REG_DPLL_BW_VAR, &chan->bw_var);
+	if (rc)
+		return rc;
+
 	return 0;
 }
 
@@ -274,8 +285,8 @@ int zl3073x_chan_state_set(struct zl3073x_dev *zldev, u8 index,
 		dchan->mode_refsel = chan->mode_refsel;
 	}
 
-	/* Mailbox write for ref_prio if changed */
-	if (!memcmp(dchan->ref_prio, chan->ref_prio, sizeof(chan->ref_prio))) {
+	/* Check if any mailbox field changed */
+	if (!memcmp(&dchan->cfg, &chan->cfg, sizeof(chan->cfg))) {
 		dchan->cfg = chan->cfg;
 		return 0;
 	}
@@ -299,6 +310,20 @@ int zl3073x_chan_state_set(struct zl3073x_dev *zldev, u8 index,
 		}
 	}
 
+	/* Update changed bandwidth registers */
+	if (dchan->bw_fixed != chan->bw_fixed) {
+		rc = zl3073x_write_u8(zldev, ZL_REG_DPLL_BW_FIXED,
+				      chan->bw_fixed);
+		if (rc)
+			return rc;
+	}
+	if (dchan->bw_var != chan->bw_var) {
+		rc = zl3073x_write_u8(zldev, ZL_REG_DPLL_BW_VAR,
+				      chan->bw_var);
+		if (rc)
+			return rc;
+	}
+
 	/* Commit DPLL configuration */
 	rc = zl3073x_mb_op(zldev, ZL_REG_DPLL_MB_SEM, ZL_DPLL_MB_SEM_WR,
 			   ZL_REG_DPLL_MB_MASK, BIT(index));
@@ -307,6 +332,145 @@ int zl3073x_chan_state_set(struct zl3073x_dev *zldev, u8 index,
 
 	/* After successful write store new state */
 	dchan->cfg = chan->cfg;
+
+	return 0;
+}
+
+/*
+ * Fractional power table: 10^(r/32) scaled by 10^6, for r = 0..31.
+ * Used to compute bw_uhz = int_pow(10, q) * pow10_frac[r] / 10000
+ * where bw_var = q * 32 + r.
+ */
+static const u32 zl3073x_pow10_frac[] = {
+	 1000000, 1074608, 1154782, 1240938,
+	 1333521, 1433013, 1539927, 1654817,
+	 1778279, 1910953, 2053525, 2206734,
+	 2371374, 2548297, 2738420, 2942727,
+	 3162278, 3398208, 3651741, 3924190,
+	 4216965, 4531584, 4869675, 5232991,
+	 5623413, 6042964, 6493816, 6978306,
+	 7498942, 8058422, 8659643, 9305720,
+};
+
+#define ZL3073X_BW_VAR_MIN_FREQ	100
+#define ZL3073X_BW_VAR_MAX_FREQ	13335210
+#define ZL3073X_BW_VAR_MAX_VAL	164
+#define ZL3073X_BW_VAR_470HZ		0xC8
+#define ZL3073X_BW_470HZ_FREQ		470000000
+
+/**
+ * zl3073x_chan_bw_var_to_uhz - convert bw_var register value to µHz
+ * @bw_var: register value
+ *
+ * Formula: bw_hz = 10^(bw_var / 32) / 10^4
+ * Decomposed as: bw_var = q * 32 + r, then
+ * bw_uhz = int_pow(10, q) * pow10_frac[r] / 10000
+ *
+ * Return: bandwidth in microhertz
+ */
+static u32 zl3073x_chan_bw_var_to_uhz(u8 bw_var)
+{
+	u8 q, r;
+
+	/* Original series uses 0xC8 as a special code for 470 Hz */
+	if (bw_var == ZL3073X_BW_VAR_470HZ)
+		return ZL3073X_BW_470HZ_FREQ;
+
+	bw_var = min_t(u8, bw_var, ZL3073X_BW_VAR_MAX_VAL);
+	q = bw_var / 32;
+	r = bw_var % 32;
+
+	return mul_u64_u32_div(int_pow(10, q), zl3073x_pow10_frac[r],
+			       10000);
+}
+
+/**
+ * zl3073x_chan_uhz_to_bw_var - convert µHz to bw_var register value
+ * @uhz: bandwidth in microhertz
+ *
+ * Formula: bw_var = round(32 * log10(uhz / 100))
+ * Using intlog10: bw_var = (intlog10(uhz) + 2^18) >> 19 - 64
+ *
+ * Return: bw_var register value, clamped to ZL3073X_BW_VAR_MAX_VAL
+ */
+static u8 zl3073x_chan_uhz_to_bw_var(u32 uhz)
+{
+	int bw_var;
+
+	bw_var = ((intlog10(uhz) + (1 << 18)) >> 19) - 64;
+
+	return (u8)clamp(bw_var, 0, ZL3073X_BW_VAR_MAX_VAL);
+}
+
+/* Fixed bandwidth presets in microhertz (µHz) */
+static const u32 zl3073x_bw_fixed_uhz[] = {
+	[ZL_DPLL_BW_FIXED_14HZ]  =  14000000,
+	[ZL_DPLL_BW_FIXED_29HZ]  =  29000000,
+	[ZL_DPLL_BW_FIXED_61HZ]  =  61000000,
+	[ZL_DPLL_BW_FIXED_141HZ] = 141000000,
+	[ZL_DPLL_BW_FIXED_403HZ] = 403000000,
+	[ZL_DPLL_BW_FIXED_470HZ] = 470000000,
+};
+
+/**
+ * zl3073x_chan_bandwidth_get - convert HW bandwidth to microhertz
+ * @chan: pointer to channel state
+ *
+ * Return: current bandwidth in microhertz
+ */
+u32 zl3073x_chan_bandwidth_get(const struct zl3073x_chan *chan)
+{
+	u8 bw = FIELD_GET(ZL_DPLL_BW_FIXED_BW, chan->bw_fixed);
+
+	if (bw == ZL_DPLL_BW_FIXED_VARIABLE)
+		return zl3073x_chan_bw_var_to_uhz(chan->bw_var);
+
+	if (bw < ARRAY_SIZE(zl3073x_bw_fixed_uhz))
+		return zl3073x_bw_fixed_uhz[bw];
+
+	return 0;
+}
+
+/**
+ * zl3073x_chan_bandwidth_set - convert microhertz to HW bandwidth
+ * @zldev: pointer to zl3073x_dev structure
+ * @chan: pointer to channel state to modify
+ * @uhz: desired bandwidth in microhertz
+ *
+ * Return: 0 on success, -EINVAL if value is out of range
+ */
+int zl3073x_chan_bandwidth_set(struct zl3073x_dev *zldev,
+			       struct zl3073x_chan *chan, u32 uhz)
+{
+	int i;
+
+	/* Original series lacks bw_fixed=5 (470 Hz preset) and uses special
+	 * value of 0xC8 for bw_var instead.
+	 */
+	if (!(zldev->info->flags & ZL3073X_FLAG_BW_FIXED_470HZ) &&
+	    uhz == ZL3073X_BW_470HZ_FREQ) {
+		FIELD_MODIFY(ZL_DPLL_BW_FIXED_BW, &chan->bw_fixed,
+			     ZL_DPLL_BW_FIXED_VARIABLE);
+		chan->bw_var = ZL3073X_BW_VAR_470HZ;
+
+		return 0;
+	}
+
+	/* Check fixed presets */
+	for (i = 0; i < ARRAY_SIZE(zl3073x_bw_fixed_uhz); i++) {
+		if (zl3073x_bw_fixed_uhz[i] == uhz) {
+			FIELD_MODIFY(ZL_DPLL_BW_FIXED_BW, &chan->bw_fixed, i);
+			return 0;
+		}
+	}
+
+	/* Variable mode */
+	if (uhz < ZL3073X_BW_VAR_MIN_FREQ || uhz > ZL3073X_BW_VAR_MAX_FREQ)
+		return -EINVAL;
+
+	FIELD_MODIFY(ZL_DPLL_BW_FIXED_BW, &chan->bw_fixed,
+		     ZL_DPLL_BW_FIXED_VARIABLE);
+	chan->bw_var = zl3073x_chan_uhz_to_bw_var(uhz);
 
 	return 0;
 }
