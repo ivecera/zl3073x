@@ -76,6 +76,26 @@ struct dpll_device_ops {
 	int (*freq_monitor_get)(const struct dpll_device *dpll, void *dpll_priv,
 				enum dpll_feature_state *state,
 				struct netlink_ext_ack *extack);
+	int (*bandwidth_get)(const struct dpll_device *dpll, void *dpll_priv,
+			     struct dpll_device_bw *bw,
+			     struct netlink_ext_ack *extack);
+	int (*bandwidth_set)(const struct dpll_device *dpll, void *dpll_priv,
+			     u32 bandwidth, struct netlink_ext_ack *extack);
+	int (*hitless_switching_get)(const struct dpll_device *dpll,
+				     void *dpll_priv,
+				     enum dpll_feature_state *state,
+				     struct netlink_ext_ack *extack);
+	int (*hitless_switching_set)(const struct dpll_device *dpll,
+				     void *dpll_priv,
+				     enum dpll_feature_state state,
+				     struct netlink_ext_ack *extack);
+	int (*phase_slope_limit_get)(const struct dpll_device *dpll,
+				     void *dpll_priv,
+				     struct dpll_device_psl *psl,
+				     struct netlink_ext_ack *extack);
+	int (*phase_slope_limit_set)(const struct dpll_device *dpll,
+				     void *dpll_priv, u32 psl,
+				     struct netlink_ext_ack *extack);
 };
 
 enum dpll_ffo_type {

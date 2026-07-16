@@ -185,6 +185,82 @@ dpll_msg_add_freq_monitor(struct sk_buff *msg, struct dpll_device *dpll,
 }
 
 static int
+dpll_msg_add_bandwidth(struct sk_buff *msg, struct dpll_device *dpll,
+		       struct netlink_ext_ack *extack)
+{
+	const struct dpll_device_ops *ops = dpll_device_ops(dpll);
+	struct dpll_device_bw bw;
+	struct nlattr *nest;
+	int ret, i;
+
+	if (!ops->bandwidth_get)
+		return 0;
+	ret = ops->bandwidth_get(dpll, dpll_priv(dpll), &bw, extack);
+	if (ret)
+		return ret;
+	if (nla_put_u32(msg, DPLL_A_BANDWIDTH, bw.bandwidth))
+		return -EMSGSIZE;
+	for (i = 0; i < bw.range_num; i++) {
+		nest = nla_nest_start(msg, DPLL_A_BANDWIDTH_SUPPORTED);
+		if (!nest)
+			return -EMSGSIZE;
+		if (nla_put_u32(msg, DPLL_A_BANDWIDTH_MIN, bw.range[i].min))
+			goto nest_cancel;
+		if (nla_put_u32(msg, DPLL_A_BANDWIDTH_MAX, bw.range[i].max))
+			goto nest_cancel;
+		nla_nest_end(msg, nest);
+	}
+	return 0;
+
+nest_cancel:
+	nla_nest_cancel(msg, nest);
+	return -EMSGSIZE;
+}
+
+static int
+dpll_msg_add_hitless_switching(struct sk_buff *msg, struct dpll_device *dpll,
+			       struct netlink_ext_ack *extack)
+{
+	const struct dpll_device_ops *ops = dpll_device_ops(dpll);
+	enum dpll_feature_state state;
+	int ret;
+
+	/* Report even without _set op so userspace knows the switching type */
+	if (!ops->hitless_switching_get)
+		return 0;
+	ret = ops->hitless_switching_get(dpll, dpll_priv(dpll), &state, extack);
+	if (ret)
+		return ret;
+	if (nla_put_u32(msg, DPLL_A_HITLESS_SWITCHING, state))
+		return -EMSGSIZE;
+
+	return 0;
+}
+
+static int
+dpll_msg_add_phase_slope_limit(struct sk_buff *msg, struct dpll_device *dpll,
+			       struct netlink_ext_ack *extack)
+{
+	const struct dpll_device_ops *ops = dpll_device_ops(dpll);
+	struct dpll_device_psl psl;
+	int ret;
+
+	if (!ops->phase_slope_limit_get)
+		return 0;
+	ret = ops->phase_slope_limit_get(dpll, dpll_priv(dpll), &psl, extack);
+	if (ret)
+		return ret;
+	if (nla_put_u32(msg, DPLL_A_PHASE_SLOPE_LIMIT, psl.psl))
+		return -EMSGSIZE;
+	if (nla_put_u32(msg, DPLL_A_PHASE_SLOPE_LIMIT_MIN, psl.min))
+		return -EMSGSIZE;
+	if (nla_put_u32(msg, DPLL_A_PHASE_SLOPE_LIMIT_MAX, psl.max))
+		return -EMSGSIZE;
+
+	return 0;
+}
+
+static int
 dpll_msg_add_phase_offset_avg_factor(struct sk_buff *msg,
 				     struct dpll_device *dpll,
 				     struct netlink_ext_ack *extack)
@@ -805,6 +881,15 @@ dpll_device_get_one(struct dpll_device *dpll, struct sk_buff *msg,
 	ret = dpll_msg_add_freq_monitor(msg, dpll, extack);
 	if (ret)
 		return ret;
+	ret = dpll_msg_add_bandwidth(msg, dpll, extack);
+	if (ret)
+		return ret;
+	ret = dpll_msg_add_hitless_switching(msg, dpll, extack);
+	if (ret)
+		return ret;
+	ret = dpll_msg_add_phase_slope_limit(msg, dpll, extack);
+	if (ret)
+		return ret;
 
 	return 0;
 }
@@ -1072,6 +1157,104 @@ dpll_freq_monitor_set(struct dpll_device *dpll, struct nlattr *a,
 		return 0;
 
 	return ops->freq_monitor_set(dpll, dpll_priv(dpll), state, extack);
+}
+
+static int
+dpll_bandwidth_set(struct dpll_device *dpll, struct nlattr *a,
+		   struct netlink_ext_ack *extack)
+{
+	const struct dpll_device_ops *ops = dpll_device_ops(dpll);
+	u32 bandwidth = nla_get_u32(a);
+	struct dpll_device_bw bw;
+	bool supported = false;
+	int ret, i;
+
+	if (!(ops->bandwidth_set && ops->bandwidth_get)) {
+		NL_SET_ERR_MSG_ATTR(extack, a,
+				    "device not capable of bandwidth setting");
+		return -EOPNOTSUPP;
+	}
+	ret = ops->bandwidth_get(dpll, dpll_priv(dpll), &bw, extack);
+	if (ret) {
+		NL_SET_ERR_MSG(extack,
+			       "unable to get current bandwidth");
+		return ret;
+	}
+	if (bandwidth == bw.bandwidth)
+		return 0;
+
+	for (i = 0; i < bw.range_num; i++) {
+		if (bandwidth >= bw.range[i].min &&
+		    bandwidth <= bw.range[i].max) {
+			supported = true;
+			break;
+		}
+	}
+	if (!supported) {
+		NL_SET_ERR_MSG_ATTR(extack, a,
+				    "bandwidth not in supported range");
+		return -EINVAL;
+	}
+
+	return ops->bandwidth_set(dpll, dpll_priv(dpll), bandwidth, extack);
+}
+
+static int
+dpll_hitless_switching_set(struct dpll_device *dpll, struct nlattr *a,
+			   struct netlink_ext_ack *extack)
+{
+	const struct dpll_device_ops *ops = dpll_device_ops(dpll);
+	enum dpll_feature_state state = nla_get_u32(a), old_state;
+	int ret;
+
+	if (!(ops->hitless_switching_set && ops->hitless_switching_get)) {
+		NL_SET_ERR_MSG_ATTR(extack, a,
+				    "device not capable of hitless switching");
+		return -EOPNOTSUPP;
+	}
+	ret = ops->hitless_switching_get(dpll, dpll_priv(dpll), &old_state,
+					 extack);
+	if (ret) {
+		NL_SET_ERR_MSG(extack,
+			       "unable to get hitless switching state");
+		return ret;
+	}
+	if (state == old_state)
+		return 0;
+
+	return ops->hitless_switching_set(dpll, dpll_priv(dpll), state, extack);
+}
+
+static int
+dpll_phase_slope_limit_set(struct dpll_device *dpll, struct nlattr *a,
+			   struct netlink_ext_ack *extack)
+{
+	const struct dpll_device_ops *ops = dpll_device_ops(dpll);
+	struct dpll_device_psl old_psl;
+	u32 psl = nla_get_u32(a);
+	int ret;
+
+	if (!(ops->phase_slope_limit_set && ops->phase_slope_limit_get)) {
+		NL_SET_ERR_MSG_ATTR(extack, a,
+				    "device not capable of phase slope limit setting");
+		return -EOPNOTSUPP;
+	}
+	ret = ops->phase_slope_limit_get(dpll, dpll_priv(dpll), &old_psl,
+					 extack);
+	if (ret) {
+		NL_SET_ERR_MSG(extack,
+			       "unable to get current phase slope limit");
+		return ret;
+	}
+	if (psl == old_psl.psl)
+		return 0;
+	if (psl && (psl < old_psl.min || psl > old_psl.max)) {
+		NL_SET_ERR_MSG_ATTR(extack, a,
+				    "phase slope limit out of supported range");
+		return -EINVAL;
+	}
+
+	return ops->phase_slope_limit_set(dpll, dpll_priv(dpll), psl, extack);
 }
 
 static int
@@ -2055,9 +2238,20 @@ dpll_set_from_nlattr(struct dpll_device *dpll, struct genl_info *info)
 				return ret;
 			break;
 		case DPLL_A_BANDWIDTH:
+			ret = dpll_bandwidth_set(dpll, a, info->extack);
+			if (ret)
+				return ret;
+			break;
 		case DPLL_A_PHASE_SLOPE_LIMIT:
+			ret = dpll_phase_slope_limit_set(dpll, a, info->extack);
+			if (ret)
+				return ret;
+			break;
 		case DPLL_A_HITLESS_SWITCHING:
-			return -EOPNOTSUPP;
+			ret = dpll_hitless_switching_set(dpll, a, info->extack);
+			if (ret)
+				return ret;
+			break;
 		}
 	}
 
