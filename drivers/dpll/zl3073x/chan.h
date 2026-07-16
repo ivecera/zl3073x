@@ -97,6 +97,29 @@ static inline void zl3073x_chan_ref_set(struct zl3073x_chan *chan, u8 ref)
 }
 
 /**
+ * zl3073x_chan_tie_clear_get - get TIE clear state
+ * @chan: pointer to channel state
+ *
+ * Return: true if TIE is cleared on reference switch, false otherwise
+ */
+static inline bool
+zl3073x_chan_tie_clear_get(const struct zl3073x_chan *chan)
+{
+	return !!FIELD_GET(ZL_DPLL_CTRL_TIE_CLEAR, chan->ctrl);
+}
+
+/**
+ * zl3073x_chan_tie_clear_set - set TIE clear state
+ * @chan: pointer to channel state
+ * @enable: true to enable, false to disable
+ */
+static inline void
+zl3073x_chan_tie_clear_set(struct zl3073x_chan *chan, bool enable)
+{
+	FIELD_MODIFY(ZL_DPLL_CTRL_TIE_CLEAR, &chan->ctrl, enable ? 1 : 0);
+}
+
+/**
  * zl3073x_chan_ref_prio_get - get reference priority
  * @chan: pointer to channel state
  * @ref: input reference index

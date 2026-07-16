@@ -1529,6 +1529,44 @@ zl3073x_dpll_freq_monitor_set(const struct dpll_device *dpll,
 	return 0;
 }
 
+static int
+zl3073x_dpll_hitless_switching_get(const struct dpll_device *dpll,
+				   void *dpll_priv,
+				   enum dpll_feature_state *state,
+				   struct netlink_ext_ack *extack)
+{
+	struct zl3073x_dpll *zldpll = dpll_priv;
+	const struct zl3073x_chan *chan;
+
+	guard(mutex)(&zldpll->lock);
+
+	chan = zl3073x_chan_state_get(zldpll->dev, zldpll->id);
+
+	*state = zl3073x_chan_tie_clear_get(chan)
+		? DPLL_FEATURE_STATE_DISABLE
+		: DPLL_FEATURE_STATE_ENABLE;
+
+	return 0;
+}
+
+static int
+zl3073x_dpll_hitless_switching_set(const struct dpll_device *dpll,
+				   void *dpll_priv,
+				   enum dpll_feature_state state,
+				   struct netlink_ext_ack *extack)
+{
+	struct zl3073x_dpll *zldpll = dpll_priv;
+	struct zl3073x_chan chan;
+
+	guard(mutex)(&zldpll->lock);
+
+	chan = *zl3073x_chan_state_get(zldpll->dev, zldpll->id);
+
+	zl3073x_chan_tie_clear_set(&chan, state != DPLL_FEATURE_STATE_ENABLE);
+
+	return zl3073x_chan_state_set(zldpll->dev, zldpll->id, &chan);
+}
+
 static const struct dpll_pin_ops zl3073x_dpll_input_pin_ops = {
 	.supported_ffo = BIT(DPLL_FFO_PIN_DEVICE),
 	.direction_get = zl3073x_dpll_pin_direction_get,
@@ -1580,6 +1618,8 @@ static const struct dpll_device_ops zl3073x_dpll_device_ops = {
 	.phase_offset_monitor_set = zl3073x_dpll_phase_offset_monitor_set,
 	.freq_monitor_get = zl3073x_dpll_freq_monitor_get,
 	.freq_monitor_set = zl3073x_dpll_freq_monitor_set,
+	.hitless_switching_get = zl3073x_dpll_hitless_switching_get,
+	.hitless_switching_set = zl3073x_dpll_hitless_switching_set,
 	.supported_modes_get = zl3073x_dpll_supported_modes_get,
 };
 
@@ -1841,8 +1881,7 @@ zl3073x_dpll_nco_pin_register(struct zl3073x_dpll *zldpll)
 	chan = *zl3073x_chan_state_get(zldpll->dev, zldpll->id);
 	FIELD_MODIFY(ZL_DPLL_CTRL_NCO_AUTO_READ, &chan.ctrl, 1);
 	FIELD_MODIFY(ZL_DPLL_CTRL_TOD_STEP_RST, &chan.ctrl, 1);
-	FIELD_MODIFY(ZL_DPLL_CTRL_TIE_CLEAR, &chan.ctrl,
-		     zldpll->type == DPLL_TYPE_PPS ? 1 : 0);
+	zl3073x_chan_tie_clear_set(&chan, zldpll->type == DPLL_TYPE_PPS);
 	rc = zl3073x_chan_state_set(zldpll->dev, zldpll->id, &chan);
 	mutex_unlock(&zldpll->lock);
 	if (rc)
