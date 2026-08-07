@@ -1339,6 +1339,15 @@ static int macvlan_validate(struct nlattr *tb[], struct nlattr *data[],
 	if (!data)
 		return 0;
 
+	if (data[IFLA_MACVLAN_BC_QUEUE_LEN] &&
+	    nla_get_u32(data[IFLA_MACVLAN_BC_QUEUE_LEN]) >
+			MACVLAN_DEFAULT_BC_QUEUE_LEN &&
+	    !capable(CAP_NET_ADMIN)) {
+		NL_SET_ERR_MSG_ATTR(extack, data[IFLA_MACVLAN_BC_QUEUE_LEN],
+				    "bc_queue_len above the default requires CAP_NET_ADMIN in the initial user namespace");
+		return -EPERM;
+	}
+
 	if (data[IFLA_MACVLAN_FLAGS] &&
 	    nla_get_u16(data[IFLA_MACVLAN_FLAGS]) & ~(MACVLAN_FLAG_NOPROMISC |
 						      MACVLAN_FLAG_NODST))
@@ -1483,8 +1492,14 @@ int macvlan_common_newlink(struct net_device *dev,
 	/* When creating macvlans or macvtaps on top of other macvlans - use
 	 * the real device as the lowerdev.
 	 */
-	if (netif_is_macvlan(lowerdev))
+	if (netif_is_macvlan(lowerdev)) {
 		lowerdev = macvlan_dev_real_dev(lowerdev);
+		if (!rtnl_dev_link_net_capable(dev, dev_net(lowerdev))) {
+			NL_SET_ERR_MSG(extack,
+				       "Creating a macvlan on a lower device in another network namespace requires CAP_NET_ADMIN in that namespace");
+			return -EPERM;
+		}
+	}
 
 	if (!tb[IFLA_MTU])
 		dev->mtu = lowerdev->mtu;
@@ -1622,6 +1637,14 @@ static int macvlan_changelink(struct net_device *dev,
 	bool set_mode = false;
 	enum macvlan_macaddr_mode macmode;
 	int ret;
+
+	if (data &&
+	    (data[IFLA_MACVLAN_BC_QUEUE_LEN] || data[IFLA_MACVLAN_BC_CUTOFF]) &&
+	    !rtnl_dev_link_net_capable(dev, dev_net(vlan->lowerdev))) {
+		NL_SET_ERR_MSG(extack,
+			       "Changing shared macvlan port settings requires CAP_NET_ADMIN in the lower device network namespace");
+		return -EPERM;
+	}
 
 	/* Validate mode, but don't set yet: setting flags may fail. */
 	if (data && data[IFLA_MACVLAN_MODE]) {
@@ -1906,7 +1929,9 @@ static int __init macvlan_init_module(void)
 {
 	int err;
 
-	register_netdevice_notifier(&macvlan_notifier_block);
+	err = register_netdevice_notifier(&macvlan_notifier_block);
+	if (err)
+		return err;
 
 	err = macvlan_link_register(&macvlan_link_ops);
 	if (err < 0)

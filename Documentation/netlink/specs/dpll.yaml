@@ -292,6 +292,17 @@ definitions:
       DPLL_PIN_MEASURED_FREQUENCY_DIVIDER) is a fractional part of
       a measured frequency value.
   -
+    type: const
+    name: bandwidth-divider
+    value: 1000000
+    doc: |
+      bandwidth divider allows userspace to calculate the
+      bandwidth as float with six digit decimal precision.
+      Value of (DPLL_A_BANDWIDTH / DPLL_BANDWIDTH_DIVIDER) is
+      integer part of bandwidth value in Hz.
+      Value of (DPLL_A_BANDWIDTH % DPLL_BANDWIDTH_DIVIDER) is
+      fractional part of bandwidth value in Hz.
+  -
     type: enum
     name: feature-state
     doc: |
@@ -377,6 +388,52 @@ attribute-sets:
         doc: Current or desired state of the frequency monitor feature.
           If enabled, dpll device shall measure all currently available
           inputs for their actual input frequency.
+      -
+        name: bandwidth
+        type: u32
+        doc: |
+          DPLL loop bandwidth in microhertz (µHz). Determines how fast
+          the DPLL tracks input signal changes.
+      -
+        name: bandwidth-min
+        type: u32
+        doc: Minimum value of a bandwidth range in microhertz.
+      -
+        name: bandwidth-max
+        type: u32
+        doc: Maximum value of a bandwidth range in microhertz.
+      -
+        name: bandwidth-supported
+        type: nest
+        multi-attr: true
+        nested-attributes: bandwidth-range
+        doc: |
+          Provides ranges of supported bandwidth values in microhertz.
+          Each range is a min/max pair. A range where min equals max
+          indicates a single discrete supported value.
+      -
+        name: phase-slope-limit
+        type: u32
+        doc: |
+          Phase slope limit in nanoseconds per second (ns/s). Limits
+          the rate of output phase change due to input transients.
+          A value of 0 means unlimited (PSL disabled).
+      -
+        name: phase-slope-limit-min
+        type: u32
+        doc: Minimum supported phase slope limit value.
+      -
+        name: phase-slope-limit-max
+        type: u32
+        doc: Maximum supported phase slope limit value.
+      -
+        name: hitless-switching
+        type: u32
+        enum: feature-state
+        doc: |
+          Current or desired state of hitless reference switching.
+          When enabled, the DPLL aligns output phase on reference
+          switch, minimizing output phase transients.
   -
     name: pin
     enum-name: dpll_a_pin
@@ -581,6 +638,14 @@ attribute-sets:
       -
         name: frequency-max
   -
+    name: bandwidth-range
+    subset-of: dpll
+    attributes:
+      -
+        name: bandwidth-min
+      -
+        name: bandwidth-max
+  -
     name: reference-sync
     subset-of: pin
     attributes:
@@ -638,6 +703,12 @@ operations:
             - phase-offset-monitor
             - phase-offset-avg-factor
             - frequency-monitor
+            - bandwidth
+            - bandwidth-supported
+            - phase-slope-limit
+            - phase-slope-limit-min
+            - phase-slope-limit-max
+            - hitless-switching
 
       dump:
         reply: *dev-attrs
@@ -658,6 +729,9 @@ operations:
             - phase-offset-monitor
             - phase-offset-avg-factor
             - frequency-monitor
+            - bandwidth
+            - phase-slope-limit
+            - hitless-switching
     -
       name: device-create-ntf
       doc: Notification about device appearing

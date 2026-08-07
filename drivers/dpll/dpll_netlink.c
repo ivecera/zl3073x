@@ -185,6 +185,82 @@ dpll_msg_add_freq_monitor(struct sk_buff *msg, struct dpll_device *dpll,
 }
 
 static int
+dpll_msg_add_bandwidth(struct sk_buff *msg, struct dpll_device *dpll,
+		       struct netlink_ext_ack *extack)
+{
+	const struct dpll_device_ops *ops = dpll_device_ops(dpll);
+	struct dpll_device_bw bw;
+	struct nlattr *nest;
+	int ret, i;
+
+	if (!ops->bandwidth_get)
+		return 0;
+	ret = ops->bandwidth_get(dpll, dpll_priv(dpll), &bw, extack);
+	if (ret)
+		return ret;
+	if (nla_put_u32(msg, DPLL_A_BANDWIDTH, bw.bandwidth))
+		return -EMSGSIZE;
+	for (i = 0; i < bw.range_num; i++) {
+		nest = nla_nest_start(msg, DPLL_A_BANDWIDTH_SUPPORTED);
+		if (!nest)
+			return -EMSGSIZE;
+		if (nla_put_u32(msg, DPLL_A_BANDWIDTH_MIN, bw.range[i].min))
+			goto nest_cancel;
+		if (nla_put_u32(msg, DPLL_A_BANDWIDTH_MAX, bw.range[i].max))
+			goto nest_cancel;
+		nla_nest_end(msg, nest);
+	}
+	return 0;
+
+nest_cancel:
+	nla_nest_cancel(msg, nest);
+	return -EMSGSIZE;
+}
+
+static int
+dpll_msg_add_hitless_switching(struct sk_buff *msg, struct dpll_device *dpll,
+			       struct netlink_ext_ack *extack)
+{
+	const struct dpll_device_ops *ops = dpll_device_ops(dpll);
+	enum dpll_feature_state state;
+	int ret;
+
+	/* Report even without _set op so userspace knows the switching type */
+	if (!ops->hitless_switching_get)
+		return 0;
+	ret = ops->hitless_switching_get(dpll, dpll_priv(dpll), &state, extack);
+	if (ret)
+		return ret;
+	if (nla_put_u32(msg, DPLL_A_HITLESS_SWITCHING, state))
+		return -EMSGSIZE;
+
+	return 0;
+}
+
+static int
+dpll_msg_add_phase_slope_limit(struct sk_buff *msg, struct dpll_device *dpll,
+			       struct netlink_ext_ack *extack)
+{
+	const struct dpll_device_ops *ops = dpll_device_ops(dpll);
+	struct dpll_device_psl psl;
+	int ret;
+
+	if (!ops->phase_slope_limit_get)
+		return 0;
+	ret = ops->phase_slope_limit_get(dpll, dpll_priv(dpll), &psl, extack);
+	if (ret)
+		return ret;
+	if (nla_put_u32(msg, DPLL_A_PHASE_SLOPE_LIMIT, psl.psl))
+		return -EMSGSIZE;
+	if (nla_put_u32(msg, DPLL_A_PHASE_SLOPE_LIMIT_MIN, psl.min))
+		return -EMSGSIZE;
+	if (nla_put_u32(msg, DPLL_A_PHASE_SLOPE_LIMIT_MAX, psl.max))
+		return -EMSGSIZE;
+
+	return 0;
+}
+
+static int
 dpll_msg_add_phase_offset_avg_factor(struct sk_buff *msg,
 				     struct dpll_device *dpll,
 				     struct netlink_ext_ack *extack)
@@ -805,6 +881,15 @@ dpll_device_get_one(struct dpll_device *dpll, struct sk_buff *msg,
 	ret = dpll_msg_add_freq_monitor(msg, dpll, extack);
 	if (ret)
 		return ret;
+	ret = dpll_msg_add_bandwidth(msg, dpll, extack);
+	if (ret)
+		return ret;
+	ret = dpll_msg_add_hitless_switching(msg, dpll, extack);
+	if (ret)
+		return ret;
+	ret = dpll_msg_add_phase_slope_limit(msg, dpll, extack);
+	if (ret)
+		return ret;
 
 	return 0;
 }
@@ -1075,14 +1160,111 @@ dpll_freq_monitor_set(struct dpll_device *dpll, struct nlattr *a,
 }
 
 static int
+dpll_bandwidth_set(struct dpll_device *dpll, struct nlattr *a,
+		   struct netlink_ext_ack *extack)
+{
+	const struct dpll_device_ops *ops = dpll_device_ops(dpll);
+	u32 bandwidth = nla_get_u32(a);
+	struct dpll_device_bw bw;
+	bool supported = false;
+	int ret, i;
+
+	if (!(ops->bandwidth_set && ops->bandwidth_get)) {
+		NL_SET_ERR_MSG_ATTR(extack, a,
+				    "device not capable of bandwidth setting");
+		return -EOPNOTSUPP;
+	}
+	ret = ops->bandwidth_get(dpll, dpll_priv(dpll), &bw, extack);
+	if (ret) {
+		NL_SET_ERR_MSG(extack,
+			       "unable to get current bandwidth");
+		return ret;
+	}
+	if (bandwidth == bw.bandwidth)
+		return 0;
+
+	for (i = 0; i < bw.range_num; i++) {
+		if (bandwidth >= bw.range[i].min &&
+		    bandwidth <= bw.range[i].max) {
+			supported = true;
+			break;
+		}
+	}
+	if (!supported) {
+		NL_SET_ERR_MSG_ATTR(extack, a,
+				    "bandwidth not in supported range");
+		return -EINVAL;
+	}
+
+	return ops->bandwidth_set(dpll, dpll_priv(dpll), bandwidth, extack);
+}
+
+static int
+dpll_hitless_switching_set(struct dpll_device *dpll, struct nlattr *a,
+			   struct netlink_ext_ack *extack)
+{
+	const struct dpll_device_ops *ops = dpll_device_ops(dpll);
+	enum dpll_feature_state state = nla_get_u32(a), old_state;
+	int ret;
+
+	if (!(ops->hitless_switching_set && ops->hitless_switching_get)) {
+		NL_SET_ERR_MSG_ATTR(extack, a,
+				    "device not capable of hitless switching");
+		return -EOPNOTSUPP;
+	}
+	ret = ops->hitless_switching_get(dpll, dpll_priv(dpll), &old_state,
+					 extack);
+	if (ret) {
+		NL_SET_ERR_MSG(extack,
+			       "unable to get hitless switching state");
+		return ret;
+	}
+	if (state == old_state)
+		return 0;
+
+	return ops->hitless_switching_set(dpll, dpll_priv(dpll), state, extack);
+}
+
+static int
+dpll_phase_slope_limit_set(struct dpll_device *dpll, struct nlattr *a,
+			   struct netlink_ext_ack *extack)
+{
+	const struct dpll_device_ops *ops = dpll_device_ops(dpll);
+	struct dpll_device_psl old_psl;
+	u32 psl = nla_get_u32(a);
+	int ret;
+
+	if (!(ops->phase_slope_limit_set && ops->phase_slope_limit_get)) {
+		NL_SET_ERR_MSG_ATTR(extack, a,
+				    "device not capable of phase slope limit setting");
+		return -EOPNOTSUPP;
+	}
+	ret = ops->phase_slope_limit_get(dpll, dpll_priv(dpll), &old_psl,
+					 extack);
+	if (ret) {
+		NL_SET_ERR_MSG(extack,
+			       "unable to get current phase slope limit");
+		return ret;
+	}
+	if (psl == old_psl.psl)
+		return 0;
+	if (psl && (psl < old_psl.min || psl > old_psl.max)) {
+		NL_SET_ERR_MSG_ATTR(extack, a,
+				    "phase slope limit out of supported range");
+		return -EINVAL;
+	}
+
+	return ops->phase_slope_limit_set(dpll, dpll_priv(dpll), psl, extack);
+}
+
+static int
 dpll_pin_freq_set(struct dpll_pin *pin, struct nlattr *a,
 		  struct netlink_ext_ack *extack)
 {
 	u64 freq = nla_get_u64(a), old_freq;
-	struct dpll_pin_ref *ref, *failed;
 	const struct dpll_pin_ops *ops;
+	struct dpll_pin_ref *ref;
 	struct dpll_device *dpll;
-	unsigned long i;
 	int ret;
 
 	if (!dpll_pin_is_freq_supported(pin, freq)) {
@@ -1090,22 +1272,17 @@ dpll_pin_freq_set(struct dpll_pin *pin, struct nlattr *a,
 		return -EINVAL;
 	}
 
-	xa_for_each(&pin->dpll_refs, i, ref) {
-		ops = dpll_pin_ops(ref);
-		if ((!ops->frequency_set || !ops->frequency_get) &&
-		    ref->dpll->module == pin->module &&
-		    ref->dpll->clock_id == pin->clock_id) {
-			NL_SET_ERR_MSG(extack,
-				       "frequency set not supported by the device");
-			return -EOPNOTSUPP;
-		}
-	}
 	ref = dpll_pin_own_dpll_ref_first(pin);
 	if (!ref) {
 		NL_SET_ERR_MSG(extack, "pin owner dpll not found");
 		return -ENODEV;
 	}
 	ops = dpll_pin_ops(ref);
+	if (!ops->frequency_set || !ops->frequency_get) {
+		NL_SET_ERR_MSG(extack,
+			       "frequency set not supported by the device");
+		return -EOPNOTSUPP;
+	}
 	dpll = ref->dpll;
 	ret = ops->frequency_get(pin, dpll_pin_on_dpll_priv(dpll, pin), dpll,
 				 dpll_priv(dpll), &old_freq, extack);
@@ -1116,68 +1293,42 @@ dpll_pin_freq_set(struct dpll_pin *pin, struct nlattr *a,
 	if (freq == old_freq)
 		return 0;
 
-	xa_for_each(&pin->dpll_refs, i, ref) {
-		ops = dpll_pin_ops(ref);
-		if (!ops->frequency_set)
-			continue;
-		dpll = ref->dpll;
-		ret = ops->frequency_set(pin, dpll_pin_on_dpll_priv(dpll, pin),
-					 dpll, dpll_priv(dpll), freq, extack);
-		if (ret) {
-			failed = ref;
-			NL_SET_ERR_MSG_FMT(extack, "frequency set failed for dpll_id:%u",
-					   dpll->id);
-			goto rollback;
-		}
+	ret = ops->frequency_set(pin, dpll_pin_on_dpll_priv(dpll, pin),
+				 dpll, dpll_priv(dpll), freq, extack);
+	if (ret) {
+		NL_SET_ERR_MSG_FMT(extack,
+				   "frequency set failed for dpll_id:%u",
+				   dpll->id);
+		return ret;
 	}
 	__dpll_pin_change_ntf(pin);
 
 	return 0;
-
-rollback:
-	xa_for_each(&pin->dpll_refs, i, ref) {
-		if (ref == failed)
-			break;
-		ops = dpll_pin_ops(ref);
-		if (!ops->frequency_set)
-			continue;
-		dpll = ref->dpll;
-		if (ops->frequency_set(pin, dpll_pin_on_dpll_priv(dpll, pin),
-				       dpll, dpll_priv(dpll), old_freq, extack))
-			NL_SET_ERR_MSG(extack, "set frequency rollback failed");
-	}
-	return ret;
 }
 
 static int
 dpll_pin_esync_set(struct dpll_pin *pin, struct nlattr *a,
 		   struct netlink_ext_ack *extack)
 {
-	struct dpll_pin_ref *ref, *failed;
 	const struct dpll_pin_ops *ops;
 	struct dpll_pin_esync esync;
 	u64 freq = nla_get_u64(a);
+	struct dpll_pin_ref *ref;
 	struct dpll_device *dpll;
 	bool supported = false;
-	unsigned long i;
-	int ret;
+	int ret, i;
 
-	xa_for_each(&pin->dpll_refs, i, ref) {
-		ops = dpll_pin_ops(ref);
-		if ((!ops->esync_set || !ops->esync_get) &&
-		    ref->dpll->module == pin->module &&
-		    ref->dpll->clock_id == pin->clock_id) {
-			NL_SET_ERR_MSG(extack,
-				       "embedded sync feature is not supported by this device");
-			return -EOPNOTSUPP;
-		}
-	}
 	ref = dpll_pin_own_dpll_ref_first(pin);
 	if (!ref) {
 		NL_SET_ERR_MSG(extack, "pin owner dpll not found");
 		return -ENODEV;
 	}
 	ops = dpll_pin_ops(ref);
+	if (!ops->esync_set || !ops->esync_get) {
+		NL_SET_ERR_MSG(extack,
+			       "embedded sync feature is not supported by this device");
+		return -EOPNOTSUPP;
+	}
 	dpll = ref->dpll;
 	ret = ops->esync_get(pin, dpll_pin_on_dpll_priv(dpll, pin), dpll,
 			     dpll_priv(dpll), &esync, extack);
@@ -1196,44 +1347,17 @@ dpll_pin_esync_set(struct dpll_pin *pin, struct nlattr *a,
 		return -EINVAL;
 	}
 
-	xa_for_each(&pin->dpll_refs, i, ref) {
-		void *pin_dpll_priv;
-
-		ops = dpll_pin_ops(ref);
-		if (!ops->esync_set)
-			continue;
-		dpll = ref->dpll;
-		pin_dpll_priv = dpll_pin_on_dpll_priv(dpll, pin);
-		ret = ops->esync_set(pin, pin_dpll_priv, dpll, dpll_priv(dpll),
-				      freq, extack);
-		if (ret) {
-			failed = ref;
-			NL_SET_ERR_MSG_FMT(extack,
-					   "embedded sync frequency set failed for dpll_id: %u",
-					   dpll->id);
-			goto rollback;
-		}
+	ret = ops->esync_set(pin, dpll_pin_on_dpll_priv(dpll, pin), dpll,
+			     dpll_priv(dpll), freq, extack);
+	if (ret) {
+		NL_SET_ERR_MSG_FMT(extack,
+				   "embedded sync frequency set failed for dpll_id: %u",
+				   dpll->id);
+		return ret;
 	}
 	__dpll_pin_change_ntf(pin);
 
 	return 0;
-
-rollback:
-	xa_for_each(&pin->dpll_refs, i, ref) {
-		void *pin_dpll_priv;
-
-		if (ref == failed)
-			break;
-		ops = dpll_pin_ops(ref);
-		if (!ops->esync_set)
-			continue;
-		dpll = ref->dpll;
-		pin_dpll_priv = dpll_pin_on_dpll_priv(dpll, pin);
-		if (ops->esync_set(pin, pin_dpll_priv, dpll, dpll_priv(dpll),
-				   esync.freq, extack))
-			NL_SET_ERR_MSG(extack, "set embedded sync frequency rollback failed");
-	}
-	return ret;
 }
 
 static int
@@ -1241,14 +1365,12 @@ dpll_pin_ref_sync_state_set(struct dpll_pin *pin,
 			    unsigned long ref_sync_pin_idx,
 			    const enum dpll_pin_state state,
 			    struct netlink_ext_ack *extack)
-
 {
-	struct dpll_pin_ref *ref, *failed;
 	const struct dpll_pin_ops *ops;
 	enum dpll_pin_state old_state;
 	struct dpll_pin *ref_sync_pin;
+	struct dpll_pin_ref *ref;
 	struct dpll_device *dpll;
-	unsigned long i;
 	int ret;
 
 	ref_sync_pin = xa_find(&pin->ref_sync_pins, &ref_sync_pin_idx,
@@ -1282,42 +1404,20 @@ dpll_pin_ref_sync_state_set(struct dpll_pin *pin,
 	}
 	if (state == old_state)
 		return 0;
-	xa_for_each(&pin->dpll_refs, i, ref) {
-		ops = dpll_pin_ops(ref);
-		if (!ops->ref_sync_set)
-			continue;
-		dpll = ref->dpll;
-		ret = ops->ref_sync_set(pin, dpll_pin_on_dpll_priv(dpll, pin),
-					ref_sync_pin,
-					dpll_pin_on_dpll_priv(dpll,
-							      ref_sync_pin),
-					state, extack);
-		if (ret) {
-			failed = ref;
-			NL_SET_ERR_MSG_FMT(extack, "reference sync set failed for dpll_id:%u",
-					   dpll->id);
-			goto rollback;
-		}
+
+	ret = ops->ref_sync_set(pin, dpll_pin_on_dpll_priv(dpll, pin),
+				ref_sync_pin,
+				dpll_pin_on_dpll_priv(dpll, ref_sync_pin),
+				state, extack);
+	if (ret) {
+		NL_SET_ERR_MSG_FMT(extack,
+				   "reference sync set failed for dpll_id:%u",
+				   dpll->id);
+		return ret;
 	}
 	__dpll_pin_change_ntf(pin);
 
 	return 0;
-
-rollback:
-	xa_for_each(&pin->dpll_refs, i, ref) {
-		if (ref == failed)
-			break;
-		ops = dpll_pin_ops(ref);
-		if (!ops->ref_sync_set)
-			continue;
-		dpll = ref->dpll;
-		if (ops->ref_sync_set(pin, dpll_pin_on_dpll_priv(dpll, pin),
-				      ref_sync_pin,
-				      dpll_pin_on_dpll_priv(dpll, ref_sync_pin),
-				      old_state, extack))
-			NL_SET_ERR_MSG(extack, "set reference sync rollback failed");
-	}
-	return ret;
 }
 
 static int
@@ -1478,11 +1578,10 @@ static int
 dpll_pin_phase_adj_set(struct dpll_pin *pin, struct nlattr *phase_adj_attr,
 		       struct netlink_ext_ack *extack)
 {
-	struct dpll_pin_ref *ref, *failed;
 	const struct dpll_pin_ops *ops;
 	s32 phase_adj, old_phase_adj;
+	struct dpll_pin_ref *ref;
 	struct dpll_device *dpll;
-	unsigned long i;
 	int ret;
 
 	phase_adj = nla_get_s32(phase_adj_attr);
@@ -1499,21 +1598,16 @@ dpll_pin_phase_adj_set(struct dpll_pin *pin, struct nlattr *phase_adj_attr,
 		return -EINVAL;
 	}
 
-	xa_for_each(&pin->dpll_refs, i, ref) {
-		ops = dpll_pin_ops(ref);
-		if ((!ops->phase_adjust_set || !ops->phase_adjust_get) &&
-		    ref->dpll->module == pin->module &&
-		    ref->dpll->clock_id == pin->clock_id) {
-			NL_SET_ERR_MSG(extack, "phase adjust not supported");
-			return -EOPNOTSUPP;
-		}
-	}
 	ref = dpll_pin_own_dpll_ref_first(pin);
 	if (!ref) {
 		NL_SET_ERR_MSG(extack, "pin owner dpll not found");
 		return -ENODEV;
 	}
 	ops = dpll_pin_ops(ref);
+	if (!ops->phase_adjust_set || !ops->phase_adjust_get) {
+		NL_SET_ERR_MSG(extack, "phase adjust not supported");
+		return -EOPNOTSUPP;
+	}
 	dpll = ref->dpll;
 	ret = ops->phase_adjust_get(pin, dpll_pin_on_dpll_priv(dpll, pin),
 				    dpll, dpll_priv(dpll), &old_phase_adj,
@@ -1525,41 +1619,17 @@ dpll_pin_phase_adj_set(struct dpll_pin *pin, struct nlattr *phase_adj_attr,
 	if (phase_adj == old_phase_adj)
 		return 0;
 
-	xa_for_each(&pin->dpll_refs, i, ref) {
-		ops = dpll_pin_ops(ref);
-		if (!ops->phase_adjust_set)
-			continue;
-		dpll = ref->dpll;
-		ret = ops->phase_adjust_set(pin,
-					    dpll_pin_on_dpll_priv(dpll, pin),
-					    dpll, dpll_priv(dpll), phase_adj,
-					    extack);
-		if (ret) {
-			failed = ref;
-			NL_SET_ERR_MSG_FMT(extack,
-					   "phase adjust set failed for dpll_id:%u",
-					   dpll->id);
-			goto rollback;
-		}
+	ret = ops->phase_adjust_set(pin, dpll_pin_on_dpll_priv(dpll, pin),
+				    dpll, dpll_priv(dpll), phase_adj, extack);
+	if (ret) {
+		NL_SET_ERR_MSG_FMT(extack,
+				   "phase adjust set failed for dpll_id:%u",
+				   dpll->id);
+		return ret;
 	}
 	__dpll_pin_change_ntf(pin);
 
 	return 0;
-
-rollback:
-	xa_for_each(&pin->dpll_refs, i, ref) {
-		if (ref == failed)
-			break;
-		ops = dpll_pin_ops(ref);
-		if (!ops->phase_adjust_set)
-			continue;
-		dpll = ref->dpll;
-		if (ops->phase_adjust_set(pin, dpll_pin_on_dpll_priv(dpll, pin),
-					  dpll, dpll_priv(dpll), old_phase_adj,
-					  extack))
-			NL_SET_ERR_MSG(extack, "set phase adjust rollback failed");
-	}
-	return ret;
 }
 
 static int
@@ -2051,6 +2121,21 @@ dpll_set_from_nlattr(struct dpll_device *dpll, struct genl_info *info)
 		case DPLL_A_FREQUENCY_MONITOR:
 			ret = dpll_freq_monitor_set(dpll, a,
 						    info->extack);
+			if (ret)
+				return ret;
+			break;
+		case DPLL_A_BANDWIDTH:
+			ret = dpll_bandwidth_set(dpll, a, info->extack);
+			if (ret)
+				return ret;
+			break;
+		case DPLL_A_PHASE_SLOPE_LIMIT:
+			ret = dpll_phase_slope_limit_set(dpll, a, info->extack);
+			if (ret)
+				return ret;
+			break;
+		case DPLL_A_HITLESS_SWITCHING:
+			ret = dpll_hitless_switching_set(dpll, a, info->extack);
 			if (ret)
 				return ret;
 			break;

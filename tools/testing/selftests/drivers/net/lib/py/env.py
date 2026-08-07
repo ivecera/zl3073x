@@ -7,7 +7,7 @@ import time
 import json
 from pathlib import Path
 from lib.py import KsftSkipEx, KsftXfailEx
-from lib.py import ksft_setup, wait_file
+from lib.py import ksft_pr, ksft_setup, wait_file
 from lib.py import cmd, ethtool, ip, CmdExitFailure
 from lib.py import NetNS, NetdevSimDev, UserNetNS
 from .remote import Remote
@@ -31,6 +31,7 @@ class NetDrvEnvBase:
 
         # Following attrs must be set be inheriting classes
         self.dev = None
+        self.ifname = None
 
     def _load_env_file(self):
         env = os.environ.copy()
@@ -57,6 +58,22 @@ class NetDrvEnvBase:
 
     def __del__(self):
         pass
+
+    def _print_dev_info(self):
+        """
+        Show whether the test ran on real hardware or netdevsim.
+        Useful to confirm when results are shared on the mailing list.
+        """
+        driver = "unknown"
+        try:
+            info = ethtool(f"-i {self.ifname}").stdout
+            for line in info.splitlines():
+                if line.startswith("driver:"):
+                    driver = line.split(':', 1)[1].strip() or driver
+                    break
+        except (CmdExitFailure, FileNotFoundError):
+            pass
+        ksft_pr(f"Interface: {self.ifname}, driver: {driver}")
 
     def __enter__(self):
         ip(f"link set dev {self.dev['ifname']} up")
@@ -94,6 +111,7 @@ class NetDrvEnv(NetDrvEnvBase):
             self.dev = self._ns.nsims[0].dev
         self.ifname = self.dev['ifname']
         self.ifindex = self.dev['ifindex']
+        self._print_dev_info()
 
     def __del__(self):
         if self._ns:
@@ -114,10 +132,11 @@ class NetDrvEpEnv(NetDrvEnvBase):
     nsim_v4_pfx = "192.0.2."
     nsim_v6_pfx = "2001:db8::"
 
-    def __init__(self, src_path, nsim_test=None):
+    def __init__(self, src_path, nsim_test=None, queue_count=None):
         super().__init__(src_path)
 
         self._stats_settle_time = None
+        self._queue_count = queue_count
 
         # Things we try to destroy
         self.remote = None
@@ -163,6 +182,7 @@ class NetDrvEpEnv(NetDrvEnvBase):
 
         self.ifname = self.dev['ifname']
         self.ifindex = self.dev['ifindex']
+        self._print_dev_info()
 
         # resolve remote interface name
         self.remote_ifname = self.resolve_remote_ifc()
@@ -173,9 +193,13 @@ class NetDrvEpEnv(NetDrvEnvBase):
         self._required_cmd = {}
 
     def create_local(self):
+        nsim_kwargs = {}
+        if self._queue_count:
+            nsim_kwargs["queue_count"] = self._queue_count
+
         self._netns = NetNS()
-        self._ns = NetdevSimDev()
-        self._ns_peer = NetdevSimDev(ns=self._netns)
+        self._ns = NetdevSimDev(**nsim_kwargs)
+        self._ns_peer = NetdevSimDev(ns=self._netns, **nsim_kwargs)
 
         with open("/proc/self/ns/net") as nsfd0, \
              open("/var/run/netns/" + self._netns.name) as nsfd1:
