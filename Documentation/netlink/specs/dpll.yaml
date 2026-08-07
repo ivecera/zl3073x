@@ -426,6 +426,14 @@ attribute-sets:
         name: phase-slope-limit-max
         type: u32
         doc: Maximum supported phase slope limit value.
+      -
+        name: hitless-switching
+        type: u32
+        enum: feature-state
+        doc: |
+          Current or desired state of hitless reference switching.
+          When enabled, the DPLL aligns output phase on reference
+          switch, minimizing output phase transients.
   -
     name: pin
     enum-name: dpll_a_pin
@@ -701,6 +709,7 @@ operations:
             - phase-slope-limit
             - phase-slope-limit-min
             - phase-slope-limit-max
+            - hitless-switching
 
       dump:
         reply: *dev-attrs
@@ -723,6 +732,7 @@ operations:
             - frequency-monitor
             - bandwidth
             - phase-slope-limit
+            - hitless-switching
     -
       name: device-create-ntf
       doc: Notification about device appearing

@@ -88,6 +88,14 @@ struct dpll_device_ops {
 	int (*phase_slope_limit_set)(const struct dpll_device *dpll,
 				     void *dpll_priv, u32 psl,
 				     struct netlink_ext_ack *extack);
+	int (*hitless_switching_get)(const struct dpll_device *dpll,
+				     void *dpll_priv,
+				     enum dpll_feature_state *state,
+				     struct netlink_ext_ack *extack);
+	int (*hitless_switching_set)(const struct dpll_device *dpll,
+				     void *dpll_priv,
+				     enum dpll_feature_state state,
+				     struct netlink_ext_ack *extack);
 };
 
 enum dpll_ffo_type {

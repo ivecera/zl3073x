@@ -87,6 +87,20 @@ The supported range is reported via ``DPLL_A_PHASE_SLOPE_LIMIT_MIN`` and
   ``DPLL_A_PHASE_SLOPE_LIMIT_MAX``       attr maximum supported PSL value
   ====================================== ==================================
 
+Hitless reference switching
+---------------------------
+
+When enabled, the DPLL seamlessly switches to a backup reference upon
+loss of the primary source without introducing phase or frequency
+discontinuities at its output.
+
+The feature state is reported and controlled via
+``DPLL_A_HITLESS_SWITCHING`` using ``enum dpll_feature_state`` values.
+
+  ====================================== ==================================
+  ``DPLL_A_HITLESS_SWITCHING``           attr state of a feature
+  ====================================== ==================================
+
 Pin object
 ==========
 
@@ -444,6 +458,7 @@ suffix according to attribute purpose.
     ``DPLL_A_PHASE_SLOPE_LIMIT``       attr phase slope limit in ns/s
     ``DPLL_A_PHASE_SLOPE_LIMIT_MIN``   attr minimum supported PSL
     ``DPLL_A_PHASE_SLOPE_LIMIT_MAX``   attr maximum supported PSL
+    ``DPLL_A_HITLESS_SWITCHING``       attr hitless switching state
   ==================================== =================================
 
   ==================================== =================================
@@ -452,6 +467,7 @@ suffix according to attribute purpose.
     ``DPLL_A_MODE``                    attr selection mode to configure
     ``DPLL_A_BANDWIDTH``               attr loop bandwidth in µHz
     ``DPLL_A_PHASE_SLOPE_LIMIT``       attr phase slope limit in ns/s
+    ``DPLL_A_HITLESS_SWITCHING``       attr hitless switching state
   ==================================== =================================
 
 Constants identifying command types for pins uses a

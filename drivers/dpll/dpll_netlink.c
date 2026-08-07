@@ -257,6 +257,26 @@ dpll_msg_add_phase_slope_limit(struct sk_buff *msg, struct dpll_device *dpll,
 }
 
 static int
+dpll_msg_add_hitless_switching(struct sk_buff *msg, struct dpll_device *dpll,
+			       struct netlink_ext_ack *extack)
+{
+	const struct dpll_device_ops *ops = dpll_device_ops(dpll);
+	enum dpll_feature_state state;
+	int ret;
+
+	/* Report even without _set op so userspace knows the switching type */
+	if (!ops->hitless_switching_get)
+		return 0;
+	ret = ops->hitless_switching_get(dpll, dpll_priv(dpll), &state, extack);
+	if (ret)
+		return ret;
+	if (nla_put_u32(msg, DPLL_A_HITLESS_SWITCHING, state))
+		return -EMSGSIZE;
+
+	return 0;
+}
+
+static int
 dpll_msg_add_phase_offset_avg_factor(struct sk_buff *msg,
 				     struct dpll_device *dpll,
 				     struct netlink_ext_ack *extack)
@@ -886,6 +906,9 @@ dpll_device_get_one(struct dpll_device *dpll, struct sk_buff *msg,
 	ret = dpll_msg_add_phase_slope_limit(msg, dpll, extack);
 	if (ret)
 		return ret;
+	ret = dpll_msg_add_hitless_switching(msg, dpll, extack);
+	if (ret)
+		return ret;
 
 	return 0;
 }
@@ -1225,6 +1248,32 @@ dpll_phase_slope_limit_set(struct dpll_device *dpll, struct nlattr *a,
 	}
 
 	return ops->phase_slope_limit_set(dpll, dpll_priv(dpll), psl, extack);
+}
+
+static int
+dpll_hitless_switching_set(struct dpll_device *dpll, struct nlattr *a,
+			   struct netlink_ext_ack *extack)
+{
+	const struct dpll_device_ops *ops = dpll_device_ops(dpll);
+	enum dpll_feature_state state = nla_get_u32(a), old_state;
+	int ret;
+
+	if (!(ops->hitless_switching_set && ops->hitless_switching_get)) {
+		NL_SET_ERR_MSG_ATTR(extack, a,
+				    "device not capable of hitless switching");
+		return -EOPNOTSUPP;
+	}
+	ret = ops->hitless_switching_get(dpll, dpll_priv(dpll), &old_state,
+					 extack);
+	if (ret) {
+		NL_SET_ERR_MSG(extack,
+			       "unable to get hitless switching state");
+		return ret;
+	}
+	if (state == old_state)
+		return 0;
+
+	return ops->hitless_switching_set(dpll, dpll_priv(dpll), state, extack);
 }
 
 static int
@@ -2105,6 +2154,11 @@ dpll_set_from_nlattr(struct dpll_device *dpll, struct genl_info *info)
 			break;
 		case DPLL_A_PHASE_SLOPE_LIMIT:
 			ret = dpll_phase_slope_limit_set(dpll, a, info->extack);
+			if (ret)
+				return ret;
+			break;
+		case DPLL_A_HITLESS_SWITCHING:
+			ret = dpll_hitless_switching_set(dpll, a, info->extack);
 			if (ret)
 				return ret;
 			break;
