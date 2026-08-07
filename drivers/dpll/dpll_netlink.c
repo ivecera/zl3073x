@@ -201,6 +201,39 @@ dpll_msg_add_freq_monitor(struct sk_buff *msg, struct dpll_device *dpll,
 }
 
 static int
+dpll_msg_add_bandwidth(struct sk_buff *msg, struct dpll_device *dpll,
+		       struct netlink_ext_ack *extack)
+{
+	const struct dpll_device_ops *ops = dpll_device_ops(dpll);
+	struct dpll_device_bw bw;
+	struct nlattr *nest;
+	int ret, i;
+
+	if (!ops->bandwidth_get)
+		return 0;
+	ret = ops->bandwidth_get(dpll, dpll_priv(dpll), &bw, extack);
+	if (ret)
+		return ret;
+	if (nla_put_u32(msg, DPLL_A_BANDWIDTH, bw.bandwidth))
+		return -EMSGSIZE;
+	for (i = 0; i < bw.range_num; i++) {
+		nest = nla_nest_start(msg, DPLL_A_BANDWIDTH_SUPPORTED);
+		if (!nest)
+			return -EMSGSIZE;
+		if (nla_put_u32(msg, DPLL_A_BANDWIDTH_MIN, bw.range[i].min))
+			goto nest_cancel;
+		if (nla_put_u32(msg, DPLL_A_BANDWIDTH_MAX, bw.range[i].max))
+			goto nest_cancel;
+		nla_nest_end(msg, nest);
+	}
+	return 0;
+
+nest_cancel:
+	nla_nest_cancel(msg, nest);
+	return -EMSGSIZE;
+}
+
+static int
 dpll_msg_add_phase_offset_avg_factor(struct sk_buff *msg,
 				     struct dpll_device *dpll,
 				     struct netlink_ext_ack *extack)
@@ -824,6 +857,9 @@ dpll_device_get_one(struct dpll_device *dpll, struct sk_buff *msg,
 	ret = dpll_msg_add_freq_monitor(msg, dpll, extack);
 	if (ret)
 		return ret;
+	ret = dpll_msg_add_bandwidth(msg, dpll, extack);
+	if (ret)
+		return ret;
 
 	return 0;
 }
@@ -1091,6 +1127,46 @@ dpll_freq_monitor_set(struct dpll_device *dpll, struct nlattr *a,
 		return 0;
 
 	return ops->freq_monitor_set(dpll, dpll_priv(dpll), state, extack);
+}
+
+static int
+dpll_bandwidth_set(struct dpll_device *dpll, struct nlattr *a,
+		   struct netlink_ext_ack *extack)
+{
+	const struct dpll_device_ops *ops = dpll_device_ops(dpll);
+	u32 bandwidth = nla_get_u32(a);
+	struct dpll_device_bw bw;
+	bool supported = false;
+	int ret, i;
+
+	if (!(ops->bandwidth_set && ops->bandwidth_get)) {
+		NL_SET_ERR_MSG_ATTR(extack, a,
+				    "device not capable of bandwidth setting");
+		return -EOPNOTSUPP;
+	}
+	ret = ops->bandwidth_get(dpll, dpll_priv(dpll), &bw, extack);
+	if (ret) {
+		NL_SET_ERR_MSG(extack,
+			       "unable to get current bandwidth");
+		return ret;
+	}
+	if (bandwidth == bw.bandwidth)
+		return 0;
+
+	for (i = 0; i < bw.range_num; i++) {
+		if (bandwidth >= bw.range[i].min &&
+		    bandwidth <= bw.range[i].max) {
+			supported = true;
+			break;
+		}
+	}
+	if (!supported) {
+		NL_SET_ERR_MSG_ATTR(extack, a,
+				    "bandwidth not in supported range");
+		return -EINVAL;
+	}
+
+	return ops->bandwidth_set(dpll, dpll_priv(dpll), bandwidth, extack);
 }
 
 static int
@@ -1961,6 +2037,11 @@ dpll_set_from_nlattr(struct dpll_device *dpll, struct genl_info *info)
 		case DPLL_A_FREQUENCY_MONITOR:
 			ret = dpll_freq_monitor_set(dpll, a,
 						    info->extack);
+			if (ret)
+				return ret;
+			break;
+		case DPLL_A_BANDWIDTH:
+			ret = dpll_bandwidth_set(dpll, a, info->extack);
 			if (ret)
 				return ret;
 			break;

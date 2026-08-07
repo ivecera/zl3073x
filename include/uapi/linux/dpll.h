@@ -225,6 +225,7 @@ enum dpll_pin_capabilities {
 
 #define DPLL_PHASE_OFFSET_DIVIDER		1000
 #define DPLL_PIN_MEASURED_FREQUENCY_DIVIDER	1000
+#define DPLL_BANDWIDTH_DIVIDER			1000000
 
 /**
  * enum dpll_feature_state - Allow control (enable/disable) and status checking
@@ -252,6 +253,10 @@ enum dpll_a {
 	DPLL_A_PHASE_OFFSET_MONITOR,
 	DPLL_A_PHASE_OFFSET_AVG_FACTOR,
 	DPLL_A_FREQUENCY_MONITOR,
+	DPLL_A_BANDWIDTH,
+	DPLL_A_BANDWIDTH_MIN,
+	DPLL_A_BANDWIDTH_MAX,
+	DPLL_A_BANDWIDTH_SUPPORTED,
 
 	__DPLL_A_MAX,
 	DPLL_A_MAX = (__DPLL_A_MAX - 1)
