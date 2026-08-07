@@ -32,6 +32,12 @@ struct dpll_device_bw {
 	u8 range_num;
 };
 
+struct dpll_device_psl {
+	u32 psl;
+	u32 min;
+	u32 max;
+};
+
 struct dpll_device_ops {
 	int (*mode_get)(const struct dpll_device *dpll, void *dpll_priv,
 			enum dpll_mode *mode, struct netlink_ext_ack *extack);
@@ -75,6 +81,13 @@ struct dpll_device_ops {
 			     struct netlink_ext_ack *extack);
 	int (*bandwidth_set)(const struct dpll_device *dpll, void *dpll_priv,
 			     u32 bandwidth, struct netlink_ext_ack *extack);
+	int (*phase_slope_limit_get)(const struct dpll_device *dpll,
+				     void *dpll_priv,
+				     struct dpll_device_psl *psl,
+				     struct netlink_ext_ack *extack);
+	int (*phase_slope_limit_set)(const struct dpll_device *dpll,
+				     void *dpll_priv, u32 psl,
+				     struct netlink_ext_ack *extack);
 };
 
 enum dpll_ffo_type {

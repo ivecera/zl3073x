@@ -234,6 +234,29 @@ nest_cancel:
 }
 
 static int
+dpll_msg_add_phase_slope_limit(struct sk_buff *msg, struct dpll_device *dpll,
+			       struct netlink_ext_ack *extack)
+{
+	const struct dpll_device_ops *ops = dpll_device_ops(dpll);
+	struct dpll_device_psl psl;
+	int ret;
+
+	if (!ops->phase_slope_limit_get)
+		return 0;
+	ret = ops->phase_slope_limit_get(dpll, dpll_priv(dpll), &psl, extack);
+	if (ret)
+		return ret;
+	if (nla_put_u32(msg, DPLL_A_PHASE_SLOPE_LIMIT, psl.psl))
+		return -EMSGSIZE;
+	if (nla_put_u32(msg, DPLL_A_PHASE_SLOPE_LIMIT_MIN, psl.min))
+		return -EMSGSIZE;
+	if (nla_put_u32(msg, DPLL_A_PHASE_SLOPE_LIMIT_MAX, psl.max))
+		return -EMSGSIZE;
+
+	return 0;
+}
+
+static int
 dpll_msg_add_phase_offset_avg_factor(struct sk_buff *msg,
 				     struct dpll_device *dpll,
 				     struct netlink_ext_ack *extack)
@@ -860,6 +883,9 @@ dpll_device_get_one(struct dpll_device *dpll, struct sk_buff *msg,
 	ret = dpll_msg_add_bandwidth(msg, dpll, extack);
 	if (ret)
 		return ret;
+	ret = dpll_msg_add_phase_slope_limit(msg, dpll, extack);
+	if (ret)
+		return ret;
 
 	return 0;
 }
@@ -1167,6 +1193,38 @@ dpll_bandwidth_set(struct dpll_device *dpll, struct nlattr *a,
 	}
 
 	return ops->bandwidth_set(dpll, dpll_priv(dpll), bandwidth, extack);
+}
+
+static int
+dpll_phase_slope_limit_set(struct dpll_device *dpll, struct nlattr *a,
+			   struct netlink_ext_ack *extack)
+{
+	const struct dpll_device_ops *ops = dpll_device_ops(dpll);
+	struct dpll_device_psl old_psl;
+	u32 psl = nla_get_u32(a);
+	int ret;
+
+	if (!(ops->phase_slope_limit_set && ops->phase_slope_limit_get)) {
+		NL_SET_ERR_MSG_ATTR(extack, a,
+				    "device not capable of phase slope limit setting");
+		return -EOPNOTSUPP;
+	}
+	ret = ops->phase_slope_limit_get(dpll, dpll_priv(dpll), &old_psl,
+					 extack);
+	if (ret) {
+		NL_SET_ERR_MSG(extack,
+			       "unable to get current phase slope limit");
+		return ret;
+	}
+	if (psl == old_psl.psl)
+		return 0;
+	if (psl && (psl < old_psl.min || psl > old_psl.max)) {
+		NL_SET_ERR_MSG_ATTR(extack, a,
+				    "phase slope limit out of supported range");
+		return -EINVAL;
+	}
+
+	return ops->phase_slope_limit_set(dpll, dpll_priv(dpll), psl, extack);
 }
 
 static int
@@ -2042,6 +2100,11 @@ dpll_set_from_nlattr(struct dpll_device *dpll, struct genl_info *info)
 			break;
 		case DPLL_A_BANDWIDTH:
 			ret = dpll_bandwidth_set(dpll, a, info->extack);
+			if (ret)
+				return ret;
+			break;
+		case DPLL_A_PHASE_SLOPE_LIMIT:
+			ret = dpll_phase_slope_limit_set(dpll, a, info->extack);
 			if (ret)
 				return ret;
 			break;

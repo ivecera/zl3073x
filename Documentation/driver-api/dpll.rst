@@ -69,6 +69,24 @@ userspace to convert microhertz to hertz.
     ``DPLL_A_BANDWIDTH_MAX``             attr maximum value of range
   ====================================== ==================================
 
+Phase slope limit
+-----------------
+
+The phase slope limiter (PSL) limits the rate of output phase change
+due to input phase transients. This protects downstream equipment from
+fast phase steps during reference rearrangement upstream.
+
+The current PSL value is reported in nanoseconds per second (ns/s) via
+``DPLL_A_PHASE_SLOPE_LIMIT``. A value of 0 means unlimited (PSL disabled).
+The supported range is reported via ``DPLL_A_PHASE_SLOPE_LIMIT_MIN`` and
+``DPLL_A_PHASE_SLOPE_LIMIT_MAX``.
+
+  ====================================== ==================================
+  ``DPLL_A_PHASE_SLOPE_LIMIT``           attr current PSL value in ns/s
+  ``DPLL_A_PHASE_SLOPE_LIMIT_MIN``       attr minimum supported PSL value
+  ``DPLL_A_PHASE_SLOPE_LIMIT_MAX``       attr maximum supported PSL value
+  ====================================== ==================================
+
 Pin object
 ==========
 
@@ -423,6 +441,9 @@ suffix according to attribute purpose.
                                        ranges
       ``DPLL_A_BANDWIDTH_MIN``         attr minimum value of range
       ``DPLL_A_BANDWIDTH_MAX``         attr maximum value of range
+    ``DPLL_A_PHASE_SLOPE_LIMIT``       attr phase slope limit in ns/s
+    ``DPLL_A_PHASE_SLOPE_LIMIT_MIN``   attr minimum supported PSL
+    ``DPLL_A_PHASE_SLOPE_LIMIT_MAX``   attr maximum supported PSL
   ==================================== =================================
 
   ==================================== =================================
@@ -430,6 +451,7 @@ suffix according to attribute purpose.
     ``DPLL_A_ID``                      attr internal dpll device index
     ``DPLL_A_MODE``                    attr selection mode to configure
     ``DPLL_A_BANDWIDTH``               attr loop bandwidth in µHz
+    ``DPLL_A_PHASE_SLOPE_LIMIT``       attr phase slope limit in ns/s
   ==================================== =================================
 
 Constants identifying command types for pins uses a
