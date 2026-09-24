@@ -3,6 +3,7 @@
 #include <linux/array_size.h>
 #include <linux/bitfield.h>
 #include <linux/bits.h>
+#include <linux/delay.h>
 #include <linux/dev_printk.h>
 #include <linux/device.h>
 #include <linux/export.h>
@@ -12,6 +13,7 @@
 #include <linux/regmap.h>
 #include <linux/sprintf.h>
 #include <linux/string_choices.h>
+#include <linux/time64.h>
 #include <linux/unaligned.h>
 #include <net/devlink.h>
 
@@ -626,6 +628,121 @@ int zl3073x_ref_phase_offsets_update(struct zl3073x_dev *zldev, int channel)
 	return zl3073x_poll_zero_u8(zldev, ZL_REG_REF_PHASE_ERR_READ_RQST,
 				    ZL_REF_PHASE_ERR_READ_RQST_RD,
 				    ZL_POLL_PHASE_ERR_TIMEOUT_US);
+}
+
+/**
+ * zl3073x_dev_gpo_set - set the static value driven by a GPO channel
+ * @zldev: pointer to zl3073x_dev structure
+ * @gpo: GPO channel index (2 * output index for the P-pin, +1 for the
+ *	 N-pin)
+ * @value: value to drive when the channel is GPO-overridden
+ *
+ * The gpo_out_x registers are direct, multi-channel bitmask registers
+ * shared by all outputs, so the read-modify-write is serialized against
+ * concurrent updates to other channels via multiop_lock.
+ *
+ * Return: 0 on success, <0 on error
+ */
+int zl3073x_dev_gpo_set(struct zl3073x_dev *zldev, u8 gpo, bool value)
+{
+	unsigned int reg;
+	u8 bit, val;
+	int rc;
+
+	if (gpo >= ZL3073X_NUM_OUTPUT_PINS)
+		return -EINVAL;
+
+	reg = ZL_REG_GPO_OUT(gpo / 8);
+	bit = gpo % 8;
+
+	guard(mutex)(&zldev->multiop_lock);
+
+	rc = zl3073x_read_u8(zldev, reg, &val);
+	if (rc)
+		return rc;
+
+	if (value)
+		val |= BIT(bit);
+	else
+		val &= ~BIT(bit);
+
+	return zl3073x_write_u8(zldev, reg, val);
+}
+
+/**
+ * zl3073x_dev_output_pin_state_set - enable or disable the given output pin
+ * @zldev: pointer to zl3073x_dev structure
+ * @id: output pin id
+ * @enable: true to enable the pin, false to disable it
+ *
+ * Differential output pins are enabled/disabled through the clean
+ * output_ctrl_x::stop condition, since they expose only a single logical
+ * pin.
+ *
+ * CMOS output pins are enabled/disabled by muting/unmuting the pin's
+ * driver via a GPO override. The GPO toggle is not glitch-free, so it is
+ * bracketed by a clean stop/restart of the whole output.
+ *
+ * Return: 0 on success, <0 on error
+ */
+int zl3073x_dev_output_pin_state_set(struct zl3073x_dev *zldev, u8 id,
+				     bool enable)
+{
+	u8 out_id = zl3073x_output_pin_out_get(id);
+	struct zl3073x_out out;
+	u32 delay, freq;
+	int rc;
+
+	out = *zl3073x_out_state_get(zldev, out_id);
+
+	if (zl3073x_out_is_diff(&out)) {
+		if (enable)
+			zl3073x_out_start(&out);
+		else
+			zl3073x_out_stop(&out);
+
+		return zl3073x_out_state_set(zldev, out_id, &out);
+	}
+
+	/* Bracket the GPO override toggle below with a clean stop/restart,
+	 * since the toggle itself is not glitch-free.
+	 */
+	zl3073x_out_stop(&out);
+	rc = zl3073x_out_state_set(zldev, out_id, &out);
+	if (rc)
+		return rc;
+
+	/* output_ctrl_x::stop is edge-aligned, so the device can take up
+	 * to half a period to actually reach the stopped state. Wait for
+	 * that long plus 25 ms, to make sure it is really stopped before
+	 * touching the GPO override below.
+	 */
+	delay = 25 * USEC_PER_MSEC;
+	freq = zl3073x_dev_output_pin_freq_get(zldev, id);
+	if (freq)
+		delay += USEC_PER_SEC / 2 / freq;
+	fsleep(delay);
+
+	if (enable) {
+		zl3073x_out_pin_func_set(&out, id, ZL3073X_OUT_PIN_F_CLOCK);
+	} else {
+		rc = zl3073x_dev_gpo_set(zldev, id, false);
+		if (rc)
+			goto restart_output;
+		zl3073x_out_pin_func_set(&out, id, ZL3073X_OUT_PIN_F_GPO_CONST);
+	}
+
+	/* Restart the output regardless of the result below: on failure,
+	 * don't leave the whole output, including the unrelated sibling
+	 * pin, stopped indefinitely.
+	 */
+	rc = zl3073x_out_state_set(zldev, out_id, &out);
+
+restart_output:
+	zl3073x_out_start(&out);
+	rc = zl3073x_out_state_set(zldev, out_id, &out) ? : rc;
+
+	return rc;
 }
 
 /**
